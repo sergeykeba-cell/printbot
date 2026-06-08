@@ -1,0 +1,75 @@
+# /opt/printbot/infrastructure/docker-compose.traefik.yml
+#
+# Глобальний reverse proxy для всіх інстансів PrintBot.
+# Запускається один раз на сервері. Автоматично підхоплює
+# нові інстанси через Docker labels без перезапуску.
+#
+# Запуск:
+#   docker compose -f docker-compose.traefik.yml up -d
+#
+# Вимоги:
+#   docker network create web_network  ← виконати один раз перед запуском
+
+version: "3.9"
+
+services:
+  traefik:
+    image: traefik:v3.0
+    container_name: global_traefik
+    restart: unless-stopped
+    command:
+      # API та dashboard (доступний тільки з localhost)
+      - "--api.dashboard=true"
+      - "--api.insecure=false"
+
+      # Docker provider: стежить за labels на контейнерах
+      - "--providers.docker=true"
+      - "--providers.docker.network=web_network"
+      - "--providers.docker.exposedbydefault=false"
+
+      # Entrypoints
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+
+      # Автоматичний редирект HTTP → HTTPS
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+
+      # Let's Encrypt через TLS-ACME challenge
+      # Замінити email на свій реальний
+      - "--certificatesresolvers.myresolver.acme.email=admin@printbot.app"
+      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+      - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
+
+      # Логування
+      - "--log.level=INFO"
+      - "--accesslog=true"
+
+    ports:
+      - "80:80"
+      - "443:443"
+
+    volumes:
+      # Docker socket для відстеження контейнерів
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      # Зберігання Let's Encrypt сертифікатів
+      - "letsencrypt:/letsencrypt"
+
+    networks:
+      - web_network
+
+    labels:
+      - "traefik.enable=true"
+      # Dashboard доступний тільки з localhost (через SSH тунель)
+      - "traefik.http.routers.traefik-dashboard.rule=Host(`traefik.localhost`)"
+      - "traefik.http.routers.traefik-dashboard.service=api@internal"
+
+volumes:
+  letsencrypt:
+    # Персистентні сертифікати — не втрачати при down/up
+
+networks:
+  web_network:
+    external: true
+    # Мережа має бути створена заздалегідь:
+    # docker network create web_network

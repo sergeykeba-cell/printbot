@@ -1,0 +1,109 @@
+# infrastructure/templates/docker-compose.instance.yml
+#
+# Шаблон для ізольованого стеку однієї точки печати.
+#
+# ВАЖЛИВО щодо resource limits:
+#   Використовуємо прямі параметри mem_limit / cpus (Compose Spec),
+#   а НЕ секцію deploy.resources — вона обробляється тільки в Docker Swarm
+#   і мовчки ігнорується при docker compose up -d (standalone).
+#
+# Змінні що підставляє оркестратор через .env файл:
+#   SUBDOMAIN, TG_BOT_TOKEN, DB_PASSWORD
+
+
+services:
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: print_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: print_instance_db
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - internal_network
+    # Resource limits (standalone Compose, без Swarm)
+    mem_limit: 256m
+    cpus: "0.50"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U print_user"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # maxmemory виставляємо нижче за mem_limit контейнера
+    command: redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru
+    networks:
+      - internal_network
+    mem_limit: 96m
+    cpus: "0.25"
+
+  api:
+    image: printbot-backend:latest
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://print_user:${DB_PASSWORD}@db:5432/print_instance_db
+      REDIS_URL: redis://redis:6379/0
+      TG_BOT_TOKEN: ${TG_BOT_TOKEN}
+      INSTANCE_SUBDOMAIN: ${SUBDOMAIN}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - internal_network
+      - web_network
+    mem_limit: 512m
+    cpus: "0.50"
+    # Traefik динамічна маршрутизація через Docker labels
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.${SUBDOMAIN}.rule=Host(`${SUBDOMAIN}.printbot.app`)"
+      - "traefik.http.routers.${SUBDOMAIN}.entrypoints=websecure"
+      - "traefik.http.routers.${SUBDOMAIN}.tls.certresolver=myresolver"
+      - "traefik.http.services.${SUBDOMAIN}.loadbalancer.server.port=8000"
+
+  worker:
+    image: printbot-backend:latest
+    restart: unless-stopped
+    command: python -m arq app.tasks.WorkerSettings
+    environment:
+      DATABASE_URL: postgresql+asyncpg://print_user:${DB_PASSWORD}@db:5432/print_instance_db
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      - redis
+      - db
+    networks:
+      - internal_network
+    # Worker отримує більше CPU і RAM під LibreOffice конвертацію
+    mem_limit: 768m
+    cpus: "1.0"
+
+  bot:
+    image: printbot-bot:latest
+    restart: unless-stopped
+    environment:
+      BOT_TOKEN: ${TG_BOT_TOKEN}
+      INSTANCE_API_URL: http://api:8000
+      INSTANCE_API_KEY: ${INSTANCE_API_KEY}
+      SHOP_NAME: ${SHOP_NAME:-Точка печати}
+    depends_on:
+      - api
+    networks:
+      - internal_network
+    mem_limit: 128m
+    cpus: "0.25"
+
+networks:
+  internal_network:
+    # Ізольована мережа — контейнери інстансу не бачать інші стеки
+  web_network:
+    external: true
+
+volumes:
+  db_data:
+    # Персистентні дані залишаються навіть після docker compose down
