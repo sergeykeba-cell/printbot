@@ -21,13 +21,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# user_id -> {job_id, notified}
-_pending: dict[int, dict] = {}
-
-
-def register_pending(user_id: int, job_id: str) -> None:
-    """Реєструє замовлення для фонового відстеження."""
-    _pending[user_id] = {"job_id": job_id, "notified": False}
+from app.pending import register_pending, get_all_pending, mark_notified
 
 
 async def _poll_orders(bot: Bot) -> None:
@@ -36,9 +30,10 @@ async def _poll_orders(bot: Bot) -> None:
     Використовує GET /api/print/jobs/{job_id}.
     """
     from app.api_client import get_job
+    from app.pending import get_all_pending, mark_notified
     while True:
         await asyncio.sleep(30)
-        for user_id, entry in list(_pending.items()):
+        for user_id, entry in get_all_pending().items():
             if entry["notified"]:
                 continue
             try:
@@ -47,19 +42,19 @@ async def _poll_orders(bot: Bot) -> None:
                 if status in ("ready_to_print", "printed"):
                     await bot.send_message(
                         user_id,
-                        f"✅ Ваше замовлення `{entry['job_id'][:8]}...` готове!\n"
+                        f"✅ Ваше замовлення <code>{entry['job_id'][:8]}</code> готове!\n"
                         f"Звертайтесь до оператора.",
-                        parse_mode="Markdown",
+                        parse_mode="HTML",
                     )
-                    entry["notified"] = True
+                    mark_notified(user_id)
                 elif status == "failed":
                     await bot.send_message(
                         user_id,
-                        f"❌ Помилка обробки замовлення `{entry['job_id'][:8]}...`.\n"
+                        f"❌ Помилка обробки замовлення <code>{entry['job_id'][:8]}</code>.\n"
                         f"Зверніться до оператора.",
-                        parse_mode="Markdown",
+                        parse_mode="HTML",
                     )
-                    entry["notified"] = True
+                    mark_notified(user_id)
             except Exception as e:
                 logger.warning("Poll помилка user=%s job=%s: %s", user_id, entry["job_id"], e)
 

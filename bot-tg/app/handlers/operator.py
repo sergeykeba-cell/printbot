@@ -218,7 +218,7 @@ async def op_list_active(query: CallbackQuery, state: FSMContext):
             parse_mode="HTML",
         )
     except Exception as e:
-        await query.answer(f"Помилка: {e}", show_alert=True)
+        await query.answer(f"Помилка: {str(e)[:180]}", show_alert=True)
     await query.answer()
 
 
@@ -233,7 +233,7 @@ async def op_list_ready(query: CallbackQuery):
             parse_mode="HTML",
         )
     except Exception as e:
-        await query.answer(f"Помилка: {e}", show_alert=True)
+        await query.answer(f"Помилка: {str(e)[:180]}", show_alert=True)
     await query.answer()
 
 
@@ -248,7 +248,7 @@ async def op_job_detail(query: CallbackQuery, callback_data: OperatorCB, state: 
             parse_mode="HTML",
         )
     except Exception as e:
-        await query.answer(f"Помилка: {e}", show_alert=True)
+        await query.answer(f"Помилка: {str(e)[:180]}", show_alert=True)
     await query.answer()
 
 
@@ -262,14 +262,17 @@ async def op_change_status(query: CallbackQuery, callback_data: OperatorCB, bot:
     new_status = status_map[callback_data.action]
     try:
         job = await update_job_status(callback_data.job_id, new_status)
+        detail_text = format_job_detail(job)
+        if len(detail_text) > 3800:
+            detail_text = detail_text[:3800] + "\n<i>...обрізано</i>"
         await query.message.edit_text(
-            format_job_detail(job),
+            detail_text,
             reply_markup=job_detail_keyboard(job),
             parse_mode="HTML",
         )
         await query.answer(f"✅ Статус змінено: {new_status}")
     except Exception as e:
-        await query.answer(f"Помилка: {e}", show_alert=True)
+        await query.answer(f"Помилка: {str(e)[:180]}", show_alert=True)
 
 @router.callback_query(OperatorCB.filter(F.action == "get_file"))
 async def op_get_file(query: CallbackQuery, callback_data: OperatorCB, bot: Bot):

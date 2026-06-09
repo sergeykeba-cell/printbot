@@ -13,6 +13,7 @@ from aiogram.types import Message, CallbackQuery
 
 from app.states import OrderFSM
 from app.keyboards import PrintCB, order_card_keyboard, order_card_text
+from app.pending import register_pending
 from app.api_client import update_job
 
 logger = logging.getLogger(__name__)
@@ -188,6 +189,7 @@ async def confirm_order(query: CallbackQuery, state: FSMContext, bot: Bot):
             parse_mode="Markdown",
         )
         await query.answer("✅ Замовлення підтверджено!")
+        register_pending(query.from_user.id, job_id)
         logger.info("Замовлення підтверджено: job_id=%s", job_id)
 
     except Exception as e:

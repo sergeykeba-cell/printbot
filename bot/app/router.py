@@ -12,6 +12,7 @@ from pathlib import Path
 
 import aiofiles
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, Security, status
+from pydantic import BaseModel, field_validator
 from fastapi.security import APIKeyHeader
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -245,3 +246,46 @@ async def list_jobs(
     result = await db.execute(query)
     jobs = result.scalars().all()
     return [PrintJobResponse.from_orm(j) for j in jobs]
+
+class StatusUpdate(BaseModel):
+    status: str
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, v: str) -> str:
+        allowed = {"draft", "processing", "ready_to_print", "printed", "failed"}
+        if v not in allowed:
+            raise ValueError(f"Статус має бути одним з: {allowed}")
+        return v
+
+
+STATUS_TRANSITIONS = {
+    "draft":          {"processing", "failed"},
+    "processing":     {"ready_to_print", "printed", "failed"},
+    "ready_to_print": {"printed", "failed"},
+    "printed":        set(),
+    "failed":         {"processing"},
+}
+
+
+@router.patch("/jobs/{job_id}/status", response_model=PrintJobResponse)
+async def update_job_status(
+    job_id: str,
+    body: StatusUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    job = await db.scalar(select(PrintJob).where(PrintJob.id == job_id))
+    if not job:
+        raise HTTPException(status_code=404, detail="Замовлення не знайдено.")
+    allowed = STATUS_TRANSITIONS.get(job.status, set())
+    if body.status not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Перехід {job.status} → {body.status} заборонено.",
+        )
+    job.status = body.status
+    await db.commit()
+    result = await db.execute(
+        select(PrintJob).options(selectinload(PrintJob.files)).where(PrintJob.id == job.id)
+    )
+    return PrintJobResponse.from_orm(result.scalar_one())
