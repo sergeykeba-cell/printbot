@@ -200,6 +200,28 @@ async def op_menu(query: CallbackQuery, state: FSMContext):
     await query.answer()
 
 
+@router.message(OperatorFSM.menu, F.text.regexp(r'^[a-fA-F0-9]{3}$'))
+async def op_search_by_code(message: Message, state: FSMContext, bot: Bot):
+    """Пошук замовлення по 3 останніх символах."""
+    code = message.text.strip().lower()
+    try:
+        all_jobs = await list_jobs(limit=100)
+        found = [j for j in all_jobs if j['id'].endswith(code)]
+        if not found:
+            await message.answer(f"❌ Замовлення з кодом <code>***{code.upper()}</code> не знайдено.", parse_mode="HTML")
+            return
+        text, kb = job_list_keyboard(found)
+        await message.answer(
+            f"🔍 Знайдено по коду <code>***{code.upper()}</code>:
+
+{text}",
+            reply_markup=kb,
+            parse_mode="HTML",
+        )
+    except Exception as e:
+        await message.answer(f"Помилка пошуку: {str(e)[:100]}")
+
+
 @router.callback_query(OperatorCB.filter(F.action.in_({"list_active", "refresh"})))
 async def op_list_active(query: CallbackQuery, state: FSMContext):
     try:
