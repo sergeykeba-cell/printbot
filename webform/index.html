@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Замовлення друку</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #1a1a1a; min-height: 100vh; }
+.header { background: #1a1a2e; color: #fff; padding: 16px 20px; display: flex; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 10; }
+.header h1 { font-size: 18px; font-weight: 600; }
+.shop-name { font-size: 13px; opacity: 0.7; }
+.steps { display: flex; background: #fff; border-bottom: 1px solid #e0e0e0; }
+.step { flex: 1; padding: 10px 4px; text-align: center; font-size: 12px; color: #999; border-bottom: 3px solid transparent; transition: all .2s; }
+.step.active { color: #1a1a2e; border-color: #1a1a2e; font-weight: 600; }
+.step.done { color: #4caf50; border-color: #4caf50; }
+.screen { display: none; padding: 20px; max-width: 600px; margin: 0 auto; padding-bottom: 90px; }
+.screen.active { display: block; }
+.card { background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+.card h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; color: #1a1a2e; }
+.drop-zone { border: 2px dashed #c0c0c0; border-radius: 12px; padding: 40px 20px; text-align: center; cursor: pointer; transition: all .2s; background: #fafafa; }
+.drop-zone:hover, .drop-zone.drag { border-color: #1a1a2e; background: #f0f0f8; }
+.drop-zone .icon { font-size: 48px; margin-bottom: 12px; }
+.drop-zone p { color: #666; font-size: 15px; margin-bottom: 8px; }
+.drop-zone span { color: #999; font-size: 13px; }
+#file-input { display: none; }
+.file-list { margin-top: 12px; }
+.file-item { display: flex; align-items: center; gap: 12px; padding: 12px; background: #f8f8f8; border-radius: 8px; margin-bottom: 8px; }
+.file-item .file-icon { font-size: 24px; flex-shrink: 0; }
+.file-item .file-info { flex: 1; min-width: 0; }
+.file-item .file-name { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.file-item .file-size { font-size: 12px; color: #999; }
+.file-item .remove { background: none; border: none; cursor: pointer; font-size: 20px; color: #999; padding: 4px; }
+.file-item .remove:hover { color: #e53935; }
+.param-row { margin-bottom: 16px; }
+.param-label { font-size: 14px; font-weight: 500; margin-bottom: 8px; color: #333; }
+.btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn-opt { padding: 10px 18px; border: 2px solid #e0e0e0; border-radius: 8px; background: #fff; font-size: 14px; cursor: pointer; transition: all .2s; }
+.btn-opt:hover { border-color: #1a1a2e; }
+.btn-opt.selected { border-color: #1a1a2e; background: #1a1a2e; color: #fff; font-weight: 600; }
+.copies-row { display: flex; align-items: center; gap: 16px; }
+.copies-btn { width: 44px; height: 44px; border: 2px solid #e0e0e0; border-radius: 8px; background: #fff; font-size: 22px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .2s; }
+.copies-btn:hover { border-color: #1a1a2e; background: #f0f0f8; }
+.copies-val { font-size: 22px; font-weight: 600; min-width: 40px; text-align: center; }
+.price-block { background: #1a1a2e; color: #fff; border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+.price-block .label { font-size: 14px; opacity: 0.7; margin-bottom: 4px; }
+.price-block .total { font-size: 32px; font-weight: 700; }
+.price-block .details { font-size: 13px; opacity: 0.6; margin-top: 8px; }
+.form-group { margin-bottom: 16px; }
+.form-group label { display: block; font-size: 14px; font-weight: 500; margin-bottom: 6px; color: #333; }
+.form-group input { width: 100%; padding: 14px 16px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 16px; transition: border-color .2s; }
+.form-group input:focus { outline: none; border-color: #1a1a2e; }
+.btn-primary { display: block; width: 100%; padding: 18px; background: #1a1a2e; color: #fff; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer; transition: opacity .2s; }
+.btn-primary:hover { opacity: 0.9; }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-secondary { display: block; width: 100%; padding: 14px; background: #fff; color: #1a1a2e; border: 2px solid #1a1a2e; border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer; }
+.success-screen { text-align: center; padding: 40px 20px; }
+.success-icon { font-size: 72px; margin-bottom: 20px; }
+.order-id { font-size: 28px; font-weight: 700; color: #1a1a2e; margin: 12px 0; letter-spacing: 2px; }
+.success-msg { font-size: 15px; color: #666; line-height: 1.6; }
+.alert { padding: 12px 16px; border-radius: 8px; font-size: 14px; margin-bottom: 12px; }
+.alert-error { background: #fdecea; color: #c62828; border: 1px solid #ef9a9a; }
+.loading { display: none; text-align: center; padding: 20px; color: #666; }
+.spinner { display: inline-block; width: 24px; height: 24px; border: 3px solid #e0e0e0; border-top-color: #1a1a2e; border-radius: 50%; animation: spin .8s linear infinite; margin-right: 8px; vertical-align: middle; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid #e0e0e0; padding: 12px 20px; display: flex; gap: 12px; z-index: 10; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>🖨 Замовлення друку</h1>
+    <div class="shop-name" id="shop-name">Завантаження...</div>
+  </div>
+</div>
+
+<div class="steps">
+  <div class="step active" id="step-1">1. Файли</div>
+  <div class="step" id="step-2">2. Параметри</div>
+  <div class="step" id="step-3">3. Підтвердження</div>
+</div>
+
+<div class="screen active" id="screen-1">
+  <div class="card">
+    <h2>Завантажте файли для друку</h2>
+    <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+      <div class="icon">📁</div>
+      <p>Торкніться щоб вибрати файли</p>
+      <span>PDF, DOCX, JPG, PNG — до 50 МБ</span>
+    </div>
+    <input type="file" id="file-input" multiple accept=".pdf,.docx,.doc,.jpg,.jpeg,.png">
+    <div class="file-list" id="file-list"></div>
+  </div>
+  <div id="screen1-error"></div>
+</div>
+
+<div class="screen" id="screen-2">
+  <div class="card">
+    <h2>Параметри друку</h2>
+    <div class="param-row">
+      <div class="param-label">Кольоровість</div>
+      <div class="btn-group">
+        <button class="btn-opt selected" data-param="color_mode" data-val="bw" onclick="selectOpt(this)">⬛ Чорно-біла</button>
+        <button class="btn-opt" data-param="color_mode" data-val="color" onclick="selectOpt(this)">🎨 Кольорова</button>
+      </div>
+    </div>
+    <div class="param-row">
+      <div class="param-label">Друк</div>
+      <div class="btn-group">
+        <button class="btn-opt selected" data-param="duplex" data-val="false" onclick="selectOpt(this)">1️⃣ Односторонній</button>
+        <button class="btn-opt" data-param="duplex" data-val="true" onclick="selectOpt(this)">2️⃣ Двосторонній</button>
+      </div>
+    </div>
+    <div class="param-row">
+      <div class="param-label">Формат паперу</div>
+      <div class="btn-group">
+        <button class="btn-opt selected" data-param="paper_format" data-val="A4" onclick="selectOpt(this)">A4</button>
+        <button class="btn-opt" data-param="paper_format" data-val="A3" onclick="selectOpt(this)">A3</button>
+        <button class="btn-opt" data-param="paper_format" data-val="A5" onclick="selectOpt(this)">A5</button>
+      </div>
+    </div>
+    <div class="param-row">
+      <div class="param-label">Кількість копій</div>
+      <div class="copies-row">
+        <button class="copies-btn" onclick="changeCopies(-1)">−</button>
+        <div class="copies-val" id="copies-display">1</div>
+        <button class="copies-btn" onclick="changeCopies(1)">+</button>
+      </div>
+    </div>
+  </div>
+  <div class="price-block">
+    <div class="label">Орієнтовна вартість</div>
+    <div class="total" id="price-display">—</div>
+    <div class="details" id="price-details"></div>
+  </div>
+</div>
+
+<div class="screen" id="screen-3">
+  <div class="card">
+    <h2>Підсумок замовлення</h2>
+    <div id="order-summary"></div>
+  </div>
+  <div class="card">
+    <h2>Контакти <span style="font-weight:400;color:#999;font-size:13px">(необов'язково)</span></h2>
+    <div class="form-group">
+      <label>Ім'я</label>
+      <input type="text" id="client-name" placeholder="Як до вас звертатись?" maxlength="50">
+    </div>
+    <div class="form-group">
+      <label>Телефон (для SMS про готовність)</label>
+      <input type="tel" id="client-phone" placeholder="+380 XX XXX XX XX" maxlength="20">
+    </div>
+  </div>
+  <div id="screen3-error"></div>
+</div>
+
+<div class="screen" id="screen-4">
+  <div class="success-screen">
+    <div class="success-icon">✅</div>
+    <div style="font-size:18px;color:#666;margin-bottom:8px">Замовлення прийнято!</div>
+    <div class="order-id" id="result-order-id"></div>
+    <div class="success-msg" id="result-msg"></div>
+    <button class="btn-primary" style="margin-top:32px;max-width:300px;margin-left:auto;margin-right:auto" onclick="resetForm()">➕ Нове замовлення</button>
+  </div>
+</div>
+
+<div class="loading" id="loading">
+  <span class="spinner"></span> Обробляємо...
+</div>
+
+<div class="bottom-nav" id="bottom-nav">
+  <button class="btn-secondary" id="btn-back" onclick="goBack()" style="display:none;flex:0 0 120px">← Назад</button>
+  <button class="btn-primary" id="btn-next" onclick="goNext()">Далі →</button>
+</div>
+
+<script>
+const parts = location.pathname.split('/').filter(Boolean);
+const SHOP = parts[0] || 'test-shop';
+const API = '/instance/' + SHOP + '/api/print';
+let currentScreen = 1;
+let files = [];
+let params = { color_mode: 'bw', duplex: false, paper_format: 'A4', copies: 1 };
+const PRICES = { bw: 2.5, color: 8.0, photo: 5.5 };
+const API_KEY = 'HcbF4iIcrrrWQNDa1YS2sEfFW0ApPSaIqoVMVfadORU';
+
+document.getElementById('shop-name').textContent = decodeURIComponent(SHOP);
+document.title = 'Друк — ' + SHOP;
+
+const dropZone = document.getElementById('drop-zone');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag'); handleFiles(e.dataTransfer.files); });
+document.getElementById('file-input').addEventListener('change', e => handleFiles(e.target.files));
+
+function handleFiles(list) {
+  const ALLOWED = ['application/pdf','application/msword','application/vnd.openxmlformats-officedocument.wordprocessingml.document','image/jpeg','image/png'];
+  for (const f of list) {
+    if (f.size > 50*1024*1024) { showError('screen1-error','Файл "'+f.name+'" перевищує 50 МБ'); continue; }
+    if (!ALLOWED.includes(f.type) && !/\.(pdf|docx?|jpg|jpeg|png)$/i.test(f.name)) { showError('screen1-error','Формат "'+f.name+'" не підтримується'); continue; }
+    if (!files.find(x => x.name===f.name && x.size===f.size)) files.push(f);
+  }
+  renderFiles(); clearError('screen1-error');
+}
+
+function fileIcon(f) {
+  if (f.type==='application/pdf'||f.name.endsWith('.pdf')) return '📄';
+  if (f.type.startsWith('image/')) return '🖼';
+  return '📝';
+}
+
+function renderFiles() {
+  document.getElementById('file-list').innerHTML = files.map((f,i) =>
+    '<div class="file-item"><div class="file-icon">'+fileIcon(f)+'</div><div class="file-info"><div class="file-name">'+f.name+'</div><div class="file-size">'+fmtSize(f.size)+'</div></div><button class="remove" onclick="removeFile('+i+')">✕</button></div>'
+  ).join('');
+  document.getElementById('btn-next').disabled = files.length === 0;
+}
+
+function removeFile(i) { files.splice(i,1); renderFiles(); }
+function fmtSize(b) { return b>1048576?(b/1048576).toFixed(1)+' МБ':(b/1024).toFixed(0)+' КБ'; }
+
+function selectOpt(btn) {
+  document.querySelectorAll('[data-param="'+btn.dataset.param+'"]').forEach(b=>b.classList.remove('selected'));
+  btn.classList.add('selected');
+  const v = btn.dataset.val;
+  params[btn.dataset.param] = v==='true'?true:v==='false'?false:v;
+  updatePrice();
+}
+
+function changeCopies(d) {
+  params.copies = Math.max(1, Math.min(999, params.copies+d));
+  document.getElementById('copies-display').textContent = params.copies;
+  updatePrice();
+}
+
+function updatePrice() {
+  const isPhoto = files.length > 0 && files.every(f=>f.type.startsWith('image/'));
+  const base = isPhoto ? PRICES.photo : (params.color_mode==='color' ? PRICES.color : PRICES.bw);
+  const total = (base * params.copies).toFixed(2);
+  document.getElementById('price-display').textContent = total + ' грн';
+  document.getElementById('price-details').textContent = base+' грн × '+params.copies+' коп.'+(params.duplex?' (двостор.)':'');
+}
+
+function row(l,v){return '<div style="display:flex;justify-content:space-between"><span style="color:#666">'+l+'</span><span style="font-weight:500">'+v+'</span></div>';}
+
+function renderSummary() {
+  document.getElementById('order-summary').innerHTML =
+    '<div style="display:grid;gap:10px">'+
+    row('Файли', files.length+' шт.')+
+    row('Кольоровість', params.color_mode==='bw'?'Чорно-біла':'Кольорова')+
+    row('Друк', params.duplex?'Двосторонній':'Односторонній')+
+    row('Формат', params.paper_format)+
+    row('Копій', params.copies)+
+    '<hr style="border:none;border-top:1px solid #eee">'+
+    '<div style="display:flex;justify-content:space-between"><span style="font-weight:600">До оплати</span><span style="font-weight:700;font-size:18px;color:#1a1a2e">'+document.getElementById('price-display').textContent+'</span></div>'+
+    '</div>';
+}
+
+function goNext() {
+  if (currentScreen===1) {
+    if (!files.length) { showError('screen1-error','Додайте хоча б один файл'); return; }
+    showScreen(2); updatePrice();
+  } else if (currentScreen===2) {
+    renderSummary(); showScreen(3);
+  } else if (currentScreen===3) {
+    submitOrder();
+  }
+}
+
+function goBack() { if (currentScreen>1) showScreen(currentScreen-1); }
+
+function showScreen(n) {
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById('screen-'+n).classList.add('active');
+  for(let i=1;i<=3;i++){
+    const el=document.getElementById('step-'+i);
+    if(el) el.className='step'+(i<n?' done':i===n?' active':'');
+  }
+  document.getElementById('btn-back').style.display = n>1&&n<4?'block':'none';
+  document.getElementById('btn-next').style.display = n<4?'block':'none';
+  document.getElementById('btn-next').textContent = n===3?'✅ Підтвердити замовлення':'Далі →';
+  document.getElementById('bottom-nav').style.display = n===4?'none':'flex';
+  currentScreen=n; window.scrollTo(0,0);
+}
+
+async function submitOrder() {
+  clearError('screen3-error');
+  showLoading(true);
+  try {
+    const uid = Date.now();
+    const jobR = await fetch(API+'/jobs?user_id='+uid, {
+      method:'POST', headers:{'Content-Type':'application/json','X-API-Key':API_KEY},
+      body: JSON.stringify({copies:params.copies, duplex:params.duplex, color_mode:params.color_mode, paper_format:params.paper_format})
+    });
+    if (!jobR.ok) throw new Error('Помилка створення замовлення ('+jobR.status+')');
+    const job = await jobR.json();
+
+    for (const file of files) {
+      const fd = new FormData(); fd.append('file', file);
+      const fr = await fetch(API+'/upload?job_id='+job.id, {method:'POST', body:fd, headers:{'X-API-Key':API_KEY}});
+      if (!fr.ok) throw new Error('Помилка завантаження: '+file.name);
+    }
+
+    const cr = await fetch(API+'/jobs/'+job.id, {
+      method:'PATCH', headers:{'Content-Type':'application/json','X-API-Key':API_KEY},
+      body: JSON.stringify({copies:params.copies, duplex:params.duplex, color_mode:params.color_mode, page_range:null, orientation:'portrait', photo_size:null})
+    });
+    if (!cr.ok) throw new Error('Помилка підтвердження ('+cr.status+')');
+
+    showLoading(false);
+    document.getElementById('result-order-id').textContent = '#'+job.id.slice(0,8).toUpperCase();
+    const phone = document.getElementById('client-phone').value.trim();
+    document.getElementById('result-msg').innerHTML = 'Покажіть цей номер оператору.<br>'+(phone?'Повідомимо SMS коли буде готово.':'Збережіть номер замовлення.');
+    showScreen(4);
+  } catch(e) {
+    showLoading(false);
+    showError('screen3-error', e.message||'Сталась помилка. Спробуйте ще раз.');
+  }
+}
+
+function resetForm() {
+  files=[]; params={color_mode:'bw',duplex:false,paper_format:'A4',copies:1};
+  document.getElementById('file-list').innerHTML='';
+  document.getElementById('file-input').value='';
+  document.getElementById('client-name').value='';
+  document.getElementById('client-phone').value='';
+  document.getElementById('copies-display').textContent='1';
+  document.querySelectorAll('.btn-opt').forEach(b=>{
+    b.classList.toggle('selected', b.dataset.val==='bw'||b.dataset.val==='false'||b.dataset.val==='A4');
+  });
+  showScreen(1);
+}
+
+function showError(id,msg){document.getElementById(id).innerHTML='<div class="alert alert-error">'+msg+'</div>';}
+function clearError(id){document.getElementById(id).innerHTML='';}
+function showLoading(v){
+  document.getElementById('loading').style.display=v?'block':'none';
+  document.getElementById('bottom-nav').style.display=v?'none':'flex';
+}
+renderFiles(); updatePrice();
+</script>
+</body>
+</html>
