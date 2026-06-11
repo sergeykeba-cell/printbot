@@ -18,7 +18,7 @@ import fitz  # PyMuPDF
 
 from sqlalchemy import select
 from app.database import AsyncSessionLocal
-from app.notify import send_admin_alert
+from app.notify import send_aggregated_alert, _periodic_flush
 from app.models import PrintedFile, PrintJob
 
 logger = logging.getLogger(__name__)
@@ -270,7 +270,10 @@ async def process_incoming_file(ctx: dict, file_id: str) -> None:
                 file_rec.status = "failed"
                 file_rec.error_log = error_trace
                 await db.commit()
-        await send_admin_alert(f"❌ Помилка обробки файлу\nfile_id: <code>{file_id}</code>\n\n<pre>{error_trace[:2000]}</pre>")
+        await send_aggregated_alert(
+            f"file_processing_error:{file_id}",
+            f"❌ Помилка обробки файлу\nfile_id: <code>{file_id}</code>\n\n<pre>{error_trace[:2000]}</pre>"
+        )
 
 
 # ── Конфігурація ARQ воркера ──────────────────────────────────────
@@ -278,8 +281,14 @@ async def process_incoming_file(ctx: dict, file_id: str) -> None:
 import os
 from arq.connections import RedisSettings
 
+async def startup(ctx):
+    import asyncio
+    asyncio.ensure_future(_periodic_flush(600))
+
+
 class WorkerSettings:
     functions = [process_incoming_file]
+    on_startup = startup
     redis_settings = RedisSettings.from_dsn(os.environ.get("REDIS_URL", "redis://localhost:6379/0"))
     max_jobs = 5
     job_timeout = 180
