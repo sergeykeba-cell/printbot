@@ -43,6 +43,9 @@ class InstanceRegistry(Base):
         onupdate=func.now(),  # ORM-рівень; тригер у БД — головний
     )
 
+    # Секрет оператора (зашифрований Fernet)
+    encrypted_operator_secret: Mapped[str | None] = mapped_column(String, nullable=True)
+
     # Зберігає повний traceback при статусі "failed"
     error_log: Mapped[str | None] = mapped_column(String, nullable=True)
 

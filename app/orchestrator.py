@@ -342,47 +342,42 @@ async def delete_instance(
         "note": "Volumes збережено. Для повного видалення: docker compose -p printbot_{subdomain} down -v",
     }
 
-
-@router.post("/{instance_id}/backup", status_code=status.HTTP_202_ACCEPTED)
-async def backup_instance(
+@router.get("/{instance_id}/operator")
+async def get_operator_info(
     instance_id: str,
     db: AsyncSession = Depends(get_manager_db),
 ):
-    """
-    Запускає backup_instance.sh для збереження БД та конфігурації.
-    Виконується асинхронно — повертає одразу, не чекає завершення.
-    """
+    """Повертає дані для налаштування оператора інстансу."""
     instance = await db.scalar(
         select(InstanceRegistry).where(InstanceRegistry.id == instance_id)
     )
     if not instance:
         raise HTTPException(status_code=404, detail="Інстанс не знайдено")
+    if instance.status != "active":
+        raise HTTPException(status_code=400, detail="Інстанс ще не активний.")
 
-    if instance.status not in ("active", "stopped"):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Бекап неможливий у статусі '{instance.status}'.",
-        )
+    operator_secret = None
+    if instance.encrypted_operator_secret:
+        operator_secret = decrypt_secret(instance.encrypted_operator_secret)
 
-    subdomain = instance.subdomain
-    script = "/opt/printbot/infrastructure/backup_instance.sh"
-
-    async def _run():
-        try:
-            await asyncio.to_thread(
-                subprocess.run,
-                ["bash", script, subdomain],
-                capture_output=True,
-                text=True,
-                timeout=120,
-            )
-        except Exception as e:
-            print(f"❌ Backup failed for {subdomain}: {e}")
-
-    asyncio.create_task(_run())
+    # Читаємо INSTANCE_API_KEY з .env інстансу
+    instance_api_key = None
+    import os
+    env_path = f"/opt/printbot/instances/{instance.subdomain}/.env"
+    if os.path.exists(env_path):
+        with open(env_path) as f:
+            for line in f:
+                if line.startswith("INSTANCE_API_KEY="):
+                    instance_api_key = line.strip().split("=", 1)[1]
 
     return {
-        "status": "started",
-        "subdomain": subdomain,
-        "backup_dir": f"/opt/printbot/backups/{subdomain}",
+        "instance_id": instance.id,
+        "subdomain": instance.subdomain,
+        "bot_url": f"https://t.me/{instance.subdomain}_bot",
+        "operator_secret": operator_secret,
+        "operator_command": f"/operator {operator_secret}" if operator_secret else None,
+        "web_url": f"https://{instance.subdomain}.printbot.app",
+        "instance_api_key": instance_api_key,
+        "operator_panel_url": "https://printbot-operator.duckdns.org",
     }
+

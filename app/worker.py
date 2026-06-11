@@ -20,7 +20,7 @@ from sqlalchemy import select
 
 from app.manager_db import AsyncSessionLocal
 from app.models import InstanceRegistry
-from app.security import decrypt_secret
+from app.security import decrypt_secret, encrypt_secret
 
 
 # ── Синхронний блок: файлові та системні операції ─────────────────
@@ -42,12 +42,14 @@ def _secure_provisioning(subdomain: str, bot_token: str, db_password: str) -> No
 
     import secrets as _secrets
     instance_api_key = _secrets.token_urlsafe(32)
+    operator_secret = _secrets.token_urlsafe(16)
 
     env_content = (
         f"SUBDOMAIN={subdomain}\n"
         f"TG_BOT_TOKEN={bot_token}\n"
         f"DB_PASSWORD={db_password}\n"
         f"INSTANCE_API_KEY={instance_api_key}\n"
+        f"OPERATOR_SECRET={operator_secret}\n"
         f"SHOP_NAME={subdomain}\n"
     )
     env_path = f"{base_dir}/.env"
@@ -74,6 +76,7 @@ def _secure_provisioning(subdomain: str, bot_token: str, db_password: str) -> No
         capture_output=True,
         text=True,
     )
+    return operator_secret
 
 
 def _wait_for_healthy(subdomain: str, timeout: int = 60, interval: int = 5) -> None:
@@ -163,7 +166,7 @@ async def deploy_instance(ctx: dict, instance_id: str) -> None:
             db_password = decrypt_secret(instance.encrypted_db_password)
 
         # Блокуючий I/O у окремому потоці: деплой + очікування healthy
-        await asyncio.to_thread(_secure_provisioning, subdomain, bot_token, db_password)
+        operator_secret = await asyncio.to_thread(_secure_provisioning, subdomain, bot_token, db_password)
         await asyncio.to_thread(_wait_for_healthy, subdomain)
 
         # Сесія 2: оновлюємо статус на "active"
@@ -176,6 +179,7 @@ async def deploy_instance(ctx: dict, instance_id: str) -> None:
                 return
             instance.status = "active"
             instance.error_log = None
+            instance.encrypted_operator_secret = encrypt_secret(operator_secret)
             await db.commit()
 
         print(f"✅ Інстанс {subdomain!r} успішно розгорнуто і перевірено.")

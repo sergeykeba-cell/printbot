@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { fmtDate } from "../utils";
 import { api } from "../api";
 
@@ -6,47 +6,51 @@ export default function DetailPanel({ instance, onClose, onAction }) {
   const [logs, setLogs]       = useState(null);
   const [logsLoading, setLL]  = useState(false);
   const [tailLines, setTail]  = useState(100);
-  const abortRef              = useRef(null);
+  const [opInfo, setOpInfo]   = useState(null);
+  const [opLoading, setOpL]   = useState(false);
+  const [copied, setCopied]   = useState(false);
+
+  const fetchOperator = async () => {
+    if (instance.status !== "active") return;
+    setOpL(true);
+    try {
+      const data = await api.getOperatorInfo(instance.id);
+      setOpInfo(data);
+    } catch (_) {
+      setOpInfo(null);
+    } finally {
+      setOpL(false);
+    }
+  };
+
+  const copyCmd = (text) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    });
+  };
 
   const fetchLogs = async (tail = tailLines) => {
-    // Скасовуємо попередній запит якщо ще не завершився
-    if (abortRef.current) abortRef.current.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-
     setLL(true);
     try {
-      const data = await api.getLogs(instance.id, tail, controller.signal);
-      if (!controller.signal.aborted) setLogs(data);
+      const data = await api.getLogs(instance.id, tail);
+      setLogs(data);
     } catch (e) {
-      if (!controller.signal.aborted)
-        setLogs({ source: "error", logs: e.message });
+      setLogs({ source: "error", logs: e.message });
     } finally {
-      if (!controller.signal.aborted) setLL(false);
+      setLL(false);
     }
   };
 
   useEffect(() => {
     setLogs(null);
+    setOpInfo(null);
     fetchLogs();
-    // Cleanup: скасовуємо запит при розмонтуванні або зміні instance
-    return () => {
-      if (abortRef.current) abortRef.current.abort();
-    };
+    fetchOperator();
   }, [instance.id]);
 
   const handleAction = async (action) => {
     await onAction(instance.id, action);
-  };
-
-  const handleBackup = async () => {
-    try {
-      await api.backup(instance.id);
-      // showToast недоступний тут — повідомлення через батьківський компонент
-      alert(`Бекап запущено: /opt/printbot/backups/${instance.subdomain}`);
-    } catch (e) {
-      alert(`Помилка бекапу: ${e.message}`);
-    }
   };
 
   return (
@@ -62,6 +66,15 @@ export default function DetailPanel({ instance, onClose, onAction }) {
         <Field label="created"      value={fmtDate(instance.created_at)} mono />
         <Field label="updated"      value={fmtDate(instance.updated_at)} mono />
       </div>
+
+      <OperatorBlock
+        info={opInfo}
+        loading={opLoading}
+        status={instance.status}
+        copied={copied}
+        onCopy={copyCmd}
+        onRefresh={fetchOperator}
+      />
 
       <div style={styles.logsHeader}>
         <div style={styles.sectionLabel}>logs</div>
@@ -97,7 +110,8 @@ export default function DetailPanel({ instance, onClose, onAction }) {
           <ActionBtn onClick={() => handleAction("start")}>▶ start</ActionBtn>
         )}
         <ActionBtn onClick={() => fetchLogs(tailLines)}>≡ refresh logs</ActionBtn>
-        <ActionBtn onClick={() => handleBackup()}>↓ backup</ActionBtn>
+        {/* backup запускається вручну на сервері: ./infrastructure/backup_instance.sh {subdomain} */}
+        <ActionBtn disabled title="запустіть вручну: backup_instance.sh">↓ backup</ActionBtn>
       </div>
     </div>
   );
@@ -165,6 +179,106 @@ function ActionBtn({ children, onClick, disabled, title }) {
   );
 }
 
+
+function OperatorBlock({ info, loading, status, copied, onCopy, onRefresh }) {
+  if (status !== "active") return null;
+
+  return (
+    <div style={opStyles.wrap}>
+      <div style={opStyles.header}>
+        <div style={opStyles.label}>operator access</div>
+        <button style={opStyles.refreshBtn} onClick={onRefresh} disabled={loading}>
+          {loading ? "..." : "↺"}
+        </button>
+      </div>
+
+      {!info && !loading && (
+        <div style={opStyles.empty}>секрет не задано — натисніть ↺</div>
+      )}
+
+      {info && (
+        <div style={opStyles.cmdRow}>
+          <span style={opStyles.dnsLabel}>bot:</span>
+          <code style={opStyles.cmd}>{info.bot_url}</code>
+          <button style={opStyles.copyBtn} onClick={() => onCopy(info.bot_url)}>copy</button>
+        </div>
+      )}
+      {info && info.operator_secret && (
+        <div style={opStyles.cmdRow}>
+          <span style={opStyles.dnsLabel}>pass:</span>
+          <code style={opStyles.cmd}>{info.operator_secret}</code>
+          <button style={opStyles.copyBtn} onClick={() => onCopy(info.operator_secret)}>copy</button>
+        </div>
+      )}
+      {info && info.instance_api_key && (
+        <div style={opStyles.cmdRow}>
+          <span style={opStyles.dnsLabel}>api:</span>
+          <code style={opStyles.cmd}>{info.instance_api_key}</code>
+          <button style={opStyles.copyBtn} onClick={() => onCopy(info.instance_api_key)}>copy</button>
+        </div>
+      )}
+      {info && info.operator_command && (
+        <div style={opStyles.cmdRow}>
+          <span style={opStyles.dnsLabel}>cmd:</span>
+          <code style={opStyles.cmd}>{info.operator_command}</code>
+          <button style={opStyles.copyBtn} onClick={() => onCopy(info.operator_command)}>
+            {copied ? "✓" : "copy"}
+          </button>
+        </div>
+      )}
+
+      {info && !info.operator_command && (
+        <div style={opStyles.empty}>operator_secret не встановлено в .env інстансу</div>
+      )}
+
+      {info && (
+        <div style={opStyles.meta}>
+          <a href={info.bot_url} target="_blank" rel="noreferrer" style={opStyles.link}>
+            {info.bot_url}
+          </a>
+          <span style={opStyles.sep}>·</span>
+          <a href={info.web_url} target="_blank" rel="noreferrer" style={opStyles.link}>
+            web form
+          </a>
+          <a href="https://printbot-operator.duckdns.org" target="_blank" rel="noreferrer" style={opStyles.link}>
+            operator panel
+          </a>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const opStyles = {
+  wrap: {
+    background: "var(--surface)", border: "0.5px solid var(--border)",
+    borderRadius: 6, padding: "10px 12px", marginBottom: 12,
+  },
+  header: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 },
+  label: { fontSize: 10, letterSpacing: "0.08em", color: "var(--muted)", textTransform: "uppercase" },
+  refreshBtn: {
+    fontSize: 12, padding: "1px 7px", borderRadius: 4,
+    border: "0.5px solid var(--border)", background: "transparent",
+    color: "var(--muted)", cursor: "pointer",
+  },
+  dnsLabel: { color: "var(--text-muted)", fontSize: "11px", minWidth: "36px", marginRight: "6px" },
+  cmdRow: { display: "flex", alignItems: "center", gap: 8, marginBottom: 6 },
+  cmd: {
+    flex: 1, fontSize: 12, fontFamily: "var(--font-mono)",
+    color: "var(--green)", background: "var(--card)",
+    border: "0.5px solid var(--border)", borderRadius: 4,
+    padding: "4px 8px", letterSpacing: "0.03em",
+  },
+  copyBtn: {
+    fontSize: 11, padding: "3px 9px", borderRadius: 4,
+    border: "0.5px solid var(--border-em)", background: "var(--card)",
+    color: "var(--ink)", cursor: "pointer", whiteSpace: "nowrap",
+  },
+  meta: { display: "flex", alignItems: "center", gap: 6, marginTop: 2 },
+  link: { fontSize: 11, color: "var(--muted)", textDecoration: "none" },
+  sep:  { fontSize: 11, color: "var(--border)" },
+  empty: { fontSize: 11, color: "var(--muted)", fontStyle: "italic" },
+};
 const styles = {
   panel: {
     background: "var(--card)", border: "0.5px solid var(--border)",

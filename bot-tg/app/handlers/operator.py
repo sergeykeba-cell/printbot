@@ -212,9 +212,7 @@ async def op_search_by_code(message: Message, state: FSMContext, bot: Bot):
             return
         text, kb = job_list_keyboard(found)
         await message.answer(
-            f"🔍 Знайдено по коду <code>***{code.upper()}</code>:
-
-{text}",
+            f"🔍 Знайдено по коду <code>***{code.upper()}</code>:\n" + text,
             reply_markup=kb,
             parse_mode="HTML",
         )
