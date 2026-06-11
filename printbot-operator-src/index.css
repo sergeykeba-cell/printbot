@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  /* Приховуємо scrollbar але залишаємо функціональність */
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Плавний scroll */
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+@layer utilities {
+  /* Анімації для drawer — Tailwind animate-in */
+  @keyframes slide-in-from-right {
+    from { transform: translateX(100%); }
+    to   { transform: translateX(0); }
+  }
+  @keyframes slide-in-from-bottom-2 {
+    from { transform: translateY(8px); opacity: 0; }
+    to   { transform: translateY(0);   opacity: 1; }
+  }
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  .animate-in { animation-fill-mode: both; }
+  .slide-in-from-right  { animation-name: slide-in-from-right; }
+  .slide-in-from-bottom-2 { animation-name: slide-in-from-bottom-2; }
+  .fade-in              { animation-name: fade-in; }
+  .duration-200         { animation-duration: 200ms; }
+}

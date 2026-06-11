@@ -1,0 +1,108 @@
+{
+  "login": {
+    "title": "PrintBot Operator",
+    "subtitle": "Введите API ключ для входа",
+    "placeholder": "API ключ",
+    "submit": "Войти",
+    "enable_audio": "Включить звуковые уведомления",
+    "error_empty": "Введите API ключ",
+    "error_invalid": "Неверный API ключ"
+  },
+  "nav": {
+    "queue": "Очередь",
+    "logout": "Выйти",
+    "theme_dark": "Тёмная тема",
+    "theme_light": "Светлая тема",
+    "audio_on": "Звук включён",
+    "audio_off": "Звук выключен",
+    "lang": "Язык"
+  },
+  "filters": {
+    "all": "Все",
+    "draft": "Черновик",
+    "processing": "Обработка",
+    "ready_to_print": "К печати",
+    "printed": "Напечатано",
+    "failed": "Ошибка"
+  },
+  "job": {
+    "id": "ID",
+    "user": "Пользователь",
+    "created": "Создано",
+    "status": "Статус",
+    "files": "Файлы",
+    "pages": "стр.",
+    "copies": "{{count}} экз.",
+    "color_label": "Цвет.",
+    "bw_label": "Ч/Б",
+    "duplex_one": "1ст.",
+    "duplex_long": "2ст.↕",
+    "duplex_short": "2ст.↔",
+    "color": "Цветной",
+    "bw": "Ч/Б",
+    "duplex_one_full": "Односторонняя",
+    "duplex_long_full": "Двусторонняя (длинная)",
+    "duplex_short_full": "Двусторонняя (короткая)",
+    "no_files": "Нет файлов",
+    "download": "Скачать",
+    "open": "Открыть",
+    "preview_loading": "Загрузка preview...",
+    "preview_unavailable": "Preview недоступен"
+  },
+  "actions": {
+    "mark_printed": "Напечатано",
+    "cancel_job": "Отменить",
+    "cancel_confirm_title": "Отменить заказ?",
+    "cancel_confirm_body": "Это действие нельзя отменить. Заказ будет удалён.",
+    "confirm": "Подтвердить",
+    "back": "Назад",
+    "retry": "Повторить"
+  },
+  "status": {
+    "draft": "Черновик",
+    "processing": "Обработка",
+    "ready_to_print": "К печати",
+    "printed": "Напечатано",
+    "failed": "Ошибка"
+  },
+  "toast": {
+    "new_job": "Новый заказ",
+    "status_updated": "Статус обновлён",
+    "job_deleted": "Заказ удалён",
+    "error_generic": "Произошла ошибка",
+    "file_downloaded": "Файл скачан"
+  },
+  "empty": {
+    "queue": "Новых заказов нет",
+    "queue_filtered": "Нет заказов с выбранным фильтром"
+  },
+  "error": {
+    "load_failed": "Не удалось загрузить заказы",
+    "action_failed": "Действие не выполнено — попробуйте ещё раз"
+  },
+  "offline": {
+    "banner": "Нет соединения — отображаются кешированные данные"
+  },
+  "date": {
+    "yesterday": "вчера"
+  },
+  "drawer": {
+    "details": "Детали заказа",
+    "updated": "Обновлено",
+    "print_config": "Параметры печати",
+    "mode": "Режим",
+    "duplex": "Duplex",
+    "copies": "Копии",
+    "photo_size": "Размер фото"
+  },
+  "shortcuts": {
+    "title": "Клавиатурные сокращения",
+    "navigate": "Навигация по очереди",
+    "open": "Открыть детали",
+    "printed": "Пометить напечатанным",
+    "failed": "Пометить как ошибку",
+    "close": "Закрыть",
+    "refresh": "Обновить очередь",
+    "help": "Показать сокращения"
+  }
+}

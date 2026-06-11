@@ -1,0 +1,108 @@
+{
+  "login": {
+    "title": "PrintBot Operator",
+    "subtitle": "Введіть API ключ для входу",
+    "placeholder": "API ключ",
+    "submit": "Увійти",
+    "enable_audio": "Увімкнути звукові сповіщення",
+    "error_empty": "Введіть API ключ",
+    "error_invalid": "Невірний API ключ"
+  },
+  "nav": {
+    "queue": "Черга",
+    "logout": "Вийти",
+    "theme_dark": "Темна тема",
+    "theme_light": "Світла тема",
+    "audio_on": "Звук увімкнено",
+    "audio_off": "Звук вимкнено",
+    "lang": "Мова"
+  },
+  "filters": {
+    "all": "Всі",
+    "draft": "Чернетка",
+    "processing": "Обробка",
+    "ready_to_print": "До друку",
+    "printed": "Надруковано",
+    "failed": "Помилка"
+  },
+  "job": {
+    "id": "ID",
+    "user": "Користувач",
+    "created": "Створено",
+    "status": "Статус",
+    "files": "Файли",
+    "pages": "стор.",
+    "copies": "{{count}} прим.",
+    "color_label": "Кол.",
+    "bw_label": "Ч/Б",
+    "duplex_one": "1ст.",
+    "duplex_long": "2ст.↕",
+    "duplex_short": "2ст.↔",
+    "color": "Кольоровий",
+    "bw": "Ч/Б",
+    "duplex_one_full": "Одностороннє",
+    "duplex_long_full": "Двостороннє (довга)",
+    "duplex_short_full": "Двостороннє (коротка)",
+    "no_files": "Немає файлів",
+    "download": "Завантажити",
+    "open": "Відкрити",
+    "preview_loading": "Завантаження preview...",
+    "preview_unavailable": "Preview недоступний"
+  },
+  "actions": {
+    "mark_printed": "Надруковано",
+    "cancel_job": "Скасувати",
+    "cancel_confirm_title": "Скасувати замовлення?",
+    "cancel_confirm_body": "Цю дію неможливо скасувати. Замовлення буде видалено.",
+    "confirm": "Підтвердити",
+    "back": "Назад",
+    "retry": "Повторити"
+  },
+  "status": {
+    "draft": "Чернетка",
+    "processing": "Обробка",
+    "ready_to_print": "До друку",
+    "printed": "Надруковано",
+    "failed": "Помилка"
+  },
+  "toast": {
+    "new_job": "Нове замовлення",
+    "status_updated": "Статус оновлено",
+    "job_deleted": "Замовлення видалено",
+    "error_generic": "Сталася помилка",
+    "file_downloaded": "Файл завантажено"
+  },
+  "empty": {
+    "queue": "Нових замовлень немає",
+    "queue_filtered": "Немає замовлень з обраним фільтром"
+  },
+  "error": {
+    "load_failed": "Не вдалося завантажити замовлення",
+    "action_failed": "Дія не виконана — спробуйте ще раз"
+  },
+  "offline": {
+    "banner": "Немає з'єднання — відображаються кешовані дані"
+  },
+  "date": {
+    "yesterday": "вчора"
+  },
+  "drawer": {
+    "details": "Деталі замовлення",
+    "updated": "Оновлено",
+    "print_config": "Параметри друку",
+    "mode": "Режим",
+    "duplex": "Duplex",
+    "copies": "Копії",
+    "photo_size": "Розмір фото"
+  },
+  "shortcuts": {
+    "title": "Клавіатурні скорочення",
+    "navigate": "Навігація по черзі",
+    "open": "Відкрити деталі",
+    "printed": "Позначити надрукованим",
+    "failed": "Позначити як помилку",
+    "close": "Закрити",
+    "refresh": "Оновити чергу",
+    "help": "Показати скорочення"
+  }
+}
