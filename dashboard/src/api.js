@@ -96,4 +96,8 @@ export const api = {
   deleteInstance(id) {
     return request(`/api/instances/${id}?confirm=true`, { method: "DELETE" });
   },
+  /** GET /api/instances/{id}/operator */
+  getOperatorInfo(id) {
+    return request(`/api/instances/${id}/operator`);
+  },
 };
