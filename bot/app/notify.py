@@ -66,6 +66,9 @@ async def send_aggregated_alert(alert_key: str, message: str, cooldown_seconds: 
     except Exception as e:
         logger.warning("send_aggregated_alert: помилка Redis: %s", e)
         # Fallback — надсилаємо напряму щоб не втратити алерт
+        await _send_telegram_message(
+            f"⚠️ Redis недоступний, алерти деградовані\n<code>{e}</code>"
+        )
         await _send_telegram_message(message)
 
 

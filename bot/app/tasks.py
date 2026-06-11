@@ -53,14 +53,22 @@ async def _convert_to_pdf(src_path: Path, out_dir: Path) -> Path:
     except asyncio.TimeoutError:
         proc.kill()
         await proc.wait()
+        await send_aggregated_alert(
+            "libreoffice_timeout",
+            f"⏱ LibreOffice timeout ({LO_TIMEOUT}s)\nФайл: <code>{src_path.name}</code>"
+        )
         raise RuntimeError(
             f"LibreOffice timeout ({LO_TIMEOUT}s) для файлу: {src_path.name}"
         )
 
     if proc.returncode != 0:
+        stderr_text = stderr.decode(errors='replace').strip()
+        await send_aggregated_alert(
+            "libreoffice_crash",
+            f"💥 LibreOffice crash (exit {proc.returncode})\nФайл: <code>{src_path.name}</code>\n<pre>{stderr_text[:500]}</pre>"
+        )
         raise RuntimeError(
-            f"LibreOffice помилка (exit {proc.returncode}): "
-            f"{stderr.decode(errors='replace').strip()}"
+            f"LibreOffice помилка (exit {proc.returncode}): {stderr_text}"
         )
 
     # LibreOffice зберігає файл з тим самим ім'ям але розширенням .pdf
@@ -207,6 +215,20 @@ async def process_incoming_file(ctx: dict, file_id: str) -> None:
             mime_type = file_rec.mime_type
             upload_dir = src_path.parent
 
+        # ── Перевірка наявності файлу на диску ───────────────────
+        if not src_path.exists():
+            await send_aggregated_alert(
+                f"file_missing_on_disk:{file_id}",
+                f"🗂 Файл не знайдено на диску\nfile_id: <code>{file_id}</code>\nШлях: <code>{src_path}</code>"
+            )
+            async with AsyncSessionLocal() as db:
+                file_rec = await db.scalar(select(PrintedFile).where(PrintedFile.id == file_id))
+                if file_rec:
+                    file_rec.status = "failed"
+                    file_rec.error_log = f"File not found on disk: {src_path}"
+                    await db.commit()
+            return
+
         # ── Конвертація (якщо не PDF) ─────────────────────────────
         if mime_type == "application/pdf":
             pdf_path = src_path
@@ -222,6 +244,10 @@ async def process_incoming_file(ctx: dict, file_id: str) -> None:
                 timeout=PDF_PARSE_TIMEOUT,
             )
         except asyncio.TimeoutError:
+            await send_aggregated_alert(
+                f"pdf_parse_timeout:{file_id}",
+                f"⚠️ Таймаут аналізу PDF ({PDF_PARSE_TIMEOUT}s)\nfile_id: <code>{file_id}</code>\nФайл: <code>{pdf_path.name}</code>"
+            )
             raise RuntimeError(
                 f"Таймаут аналізу PDF ({PDF_PARSE_TIMEOUT}s). "
                 "Можливо файл пошкоджений або занадто великий."
