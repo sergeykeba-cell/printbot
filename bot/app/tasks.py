@@ -17,6 +17,7 @@ from pathlib import Path
 import fitz  # PyMuPDF
 
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from app.database import AsyncSessionLocal
 from app.notify import send_aggregated_alert, _periodic_flush
 from app.models import PrintedFile, PrintJob
@@ -274,7 +275,14 @@ async def process_incoming_file(ctx: dict, file_id: str) -> None:
             )
             if job:
                 job.status = "ready_to_print"
-            await db.commit()
+            try:
+                await db.commit()
+            except SQLAlchemyError as e:
+                await send_aggregated_alert(
+                    "db_connection_error",
+                    f"🔴 Збій БД при збереженні результату\nfile_id: <code>{file_id}</code>\n<code>{e}</code>"
+                )
+                raise
 
         logger.info(
             "✅ Файл %s оброблено: %d стор., %s, %s",
