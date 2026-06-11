@@ -71,6 +71,7 @@ export default function DetailPanel({ instance, onClose, onAction }) {
         info={opInfo}
         loading={opLoading}
         status={instance.status}
+        instanceApiUrl={`https://${instance.subdomain}.printbot.app`}
         copied={copied}
         onCopy={copyCmd}
         onRefresh={fetchOperator}
@@ -180,7 +181,7 @@ function ActionBtn({ children, onClick, disabled, title }) {
 }
 
 
-function OperatorBlock({ info, loading, status, copied, onCopy, onRefresh }) {
+function OperatorBlock({ info, loading, status, instanceApiUrl, copied, onCopy, onRefresh }) {
   if (status !== "active") return null;
 
   return (
@@ -240,8 +241,11 @@ function OperatorBlock({ info, loading, status, copied, onCopy, onRefresh }) {
           <a href={info.web_url} target="_blank" rel="noreferrer" style={opStyles.link}>
             web form
           </a>
-          <a href="https://printbot-operator.duckdns.org" target="_blank" rel="noreferrer" style={opStyles.link}>
-            operator panel
+          
+            href={`https://printbot-operator.duckdns.org/login?instance=${encodeURIComponent(instanceApiUrl)}`}
+            target="_blank" rel="noreferrer" style={opStyles.link}
+          >
+            operator panel ↗
           </a>
         </div>
       )}

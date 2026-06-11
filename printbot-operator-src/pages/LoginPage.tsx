@@ -17,6 +17,10 @@ export function LoginPage() {
   const toggleAudio = useUiStore((s) => s.toggleAudio)
 
   const [key, setKey] = useState('')
+  const [instanceUrl, setInstanceUrl] = useState(() => {
+    const params = new URLSearchParams(window.location.search)
+    return params.get('instance') || sessionStorage.getItem('instance_url') || ''
+  })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -29,12 +33,19 @@ export function LoginPage() {
       return
     }
 
+    const trimmedUrl = instanceUrl.trim().replace(/\/+$/, '')
+    if (!trimmedUrl) {
+      setError('Введіть URL інстансу')
+      return
+    }
+
     setLoading(true)
     setError('')
 
     try {
       // Перевіряємо ключ запитом до /jobs?limit=1
-      await axiosClient.get('/jobs', {
+      const { default: axios } = await import('axios')
+      await axios.get(`${trimmedUrl}/api/print/jobs`, {
         params: { limit: 1 },
         headers: { 'X-API-Key': trimmed },
       })
@@ -50,7 +61,7 @@ export function LoginPage() {
         // Браузер заблокував — не критично
       }
 
-      login(trimmed)
+      login(trimmed, trimmedUrl)
       navigate('/', { replace: true })
     } catch {
       setError(t('login.error_invalid'))
@@ -78,6 +89,13 @@ export function LoginPage() {
 
         {/* Form */}
         <div className="flex flex-col gap-3">
+          <input
+            type="url"
+            value={instanceUrl}
+            onChange={(e) => { setInstanceUrl(e.target.value); setError('') }}
+            placeholder="https://printbot-manager.duckdns.org/instance/test-shop"
+            className="w-full rounded-xl px-4 py-3 bg-slate-800 border border-slate-700 hover:border-slate-600 text-white placeholder:text-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 transition-colors"
+          />
           <input
             ref={inputRef}
             type="password"
