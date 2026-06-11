@@ -241,7 +241,7 @@ function OperatorBlock({ info, loading, status, instanceApiUrl, copied, onCopy, 
           <a href={info.web_url} target="_blank" rel="noreferrer" style={opStyles.link}>
             web form
           </a>
-          
+          <a
             href={`https://printbot-operator.duckdns.org/login?instance=${encodeURIComponent(instanceApiUrl)}`}
             target="_blank" rel="noreferrer" style={opStyles.link}
           >
