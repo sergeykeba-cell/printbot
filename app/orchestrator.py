@@ -381,3 +381,70 @@ async def get_operator_info(
         "operator_panel_url": "https://printbot-operator.duckdns.org",
     }
 
+
+
+# ── WebSocket: live статус інстансу ───────────────────────────────
+
+from fastapi import WebSocket, WebSocketDisconnect
+from app.ws_manager import ws_manager
+
+
+@router.websocket("/{instance_id}/ws")
+async def websocket_status(instance_id: str, ws: WebSocket):
+    """Live-стрім змін статусу інстансу для операторської панелі."""
+    await ws_manager.connect(instance_id, ws)
+    try:
+        while True:
+            await ws.receive_text()
+    except WebSocketDisconnect:
+        ws_manager.disconnect(instance_id, ws)
+
+
+# ── Maintenance mode ──────────────────────────────────────────────
+
+class MaintenanceAction(str, Enum):
+    enter = "enter"
+    leave = "leave"
+
+
+class MaintenanceSchema(BaseModel):
+    action: MaintenanceAction
+
+
+@router.post("/{instance_id}/maintenance", status_code=status.HTTP_200_OK)
+async def instance_maintenance(
+    instance_id: str,
+    payload: MaintenanceSchema,
+    db: AsyncSession = Depends(get_manager_db),
+):
+    """
+    enter — переводить інстанс у статус 'maintenance'.
+    leave — повертає у 'active'.
+    """
+    instance = await db.scalar(
+        select(InstanceRegistry).where(InstanceRegistry.id == instance_id)
+    )
+    if not instance:
+        raise HTTPException(status_code=404, detail="Інстанс не знайдено")
+
+    if payload.action == MaintenanceAction.enter:
+        if instance.status == "provisioning":
+            raise HTTPException(
+                status_code=400,
+                detail="Неможливо ввести maintenance під час провізіонінгу.",
+            )
+        instance.status = "maintenance"
+        await db.commit()
+        await ws_manager.broadcast(instance_id, {"event": "status", "status": "maintenance"})
+        return {"status": "maintenance", "instance_id": instance_id}
+
+    # leave
+    if instance.status != "maintenance":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Інстанс не в режимі maintenance (поточний: '{instance.status}').",
+        )
+    instance.status = "active"
+    await db.commit()
+    await ws_manager.broadcast(instance_id, {"event": "status", "status": "active"})
+    return {"status": "active", "instance_id": instance_id}
