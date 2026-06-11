@@ -71,7 +71,7 @@ export default function DetailPanel({ instance, onClose, onAction }) {
         info={opInfo}
         loading={opLoading}
         status={instance.status}
-        instanceApiUrl={`https://${instance.subdomain}.printbot.app`}
+        instanceApiUrl={`https://printbot-manager.duckdns.org/instance/${instance.subdomain}`}
         copied={copied}
         onCopy={copyCmd}
         onRefresh={fetchOperator}
