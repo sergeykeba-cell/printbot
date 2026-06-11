@@ -9,7 +9,7 @@ export async function getJobs(params: {
   offset?: number
 }): Promise<JobsPage> {
   const { data } = await axiosClient.get<any>('/jobs', { params })
-  if (Array.isArray(data)) return { items: data, total: data.length }
+  if (Array.isArray(data)) return { items: data, total: data.length, limit: params.limit ?? 50, offset: params.offset ?? 0 }
   return data
 }
 
@@ -31,7 +31,7 @@ export async function deleteJob(id: string): Promise<void> {
 }
 
 // ─── GET /jobs/:jobId/file/:fileId — URL для завантаження ────────────────────
-export function getFileUrl(jobId: string, fileId: string): string {
+export function getFileUrl(_jobId: string, fileId: string): string {
   const base = import.meta.env.VITE_API_BASE_URL ?? ''
   const key = sessionStorage.getItem('api_key') ?? ''
   // Браузер завантажує файл напряму → ключ у query (тільки для download link)
@@ -39,7 +39,7 @@ export function getFileUrl(jobId: string, fileId: string): string {
 }
 
 // ─── GET /jobs/:jobId/file/:fileId/preview ────────────────────────────────────
-export function getFilePreviewUrl(jobId: string, fileId: string): string {
+export function getFilePreviewUrl(_jobId: string, fileId: string): string {
   const base = import.meta.env.VITE_API_BASE_URL ?? ''
   const key = sessionStorage.getItem('api_key') ?? ''
   return `${base}/api/print/files/${fileId}/download?api_key=${encodeURIComponent(key)}`

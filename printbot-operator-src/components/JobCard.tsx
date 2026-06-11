@@ -31,14 +31,14 @@ export function JobCard({ job, isSelected, onClick }: Props) {
   const shortId    = job.id.slice(0, 8).toUpperCase()
   const totalPages = job.files.reduce((s, f) => s + (f.page_count ?? 0), 0)
 
-  const colorLabel = job.color_mode === 'color'
+  const colorLabel = job.config.color_mode === 'color'
     ? t('job.color_label')
     : t('job.bw_label')
 
   const duplexLabel =
-    job.duplex === 'one_sided'       ? t('job.duplex_one') :
-    job.duplex === 'two_sided_long'  ? t('job.duplex_long') :
-                                              t('job.duplex_short')
+    job.config.duplex === 'one_sided'       ? t('job.config.duplex_one') :
+    job.config.duplex === 'two_sided_long'  ? t('job.config.duplex_long') :
+                                              t('job.config.duplex_short')
 
   return (
     <article
@@ -100,10 +100,10 @@ export function JobCard({ job, isSelected, onClick }: Props) {
         <Chip>{colorLabel}</Chip>
         <Chip>{duplexLabel}</Chip>
 
-        {job.copies > 1 && (
+        {job.config.copies > 1 && (
           <Chip>
             <Copy size={10} className="mr-0.5" />
-            {t('job.copies', { count: job.copies })}
+            {t('job.config.copies', { count: job.config.copies })}
           </Chip>
         )}
 

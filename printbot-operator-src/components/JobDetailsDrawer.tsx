@@ -167,20 +167,20 @@ export function JobDetailsDrawer({ jobId, onClose }: Props) {
               <Section title={t('drawer.print_config')}>
                 <Row label={t('drawer.mode')}>
                   <span className="text-sm text-slate-300">
-                    {job.color_mode === 'color' ? t('job.color') : t('job.bw')}
+                    {job.config.color_mode === 'color' ? t('job.color') : t('job.bw')}
                   </span>
                 </Row>
                 <Row label={t('drawer.duplex')}>
                   <span className="text-sm text-slate-300">
-                    {job.duplex === 'one_sided'
-                      ? t('job.duplex_one_full')
-                      : job.duplex === 'two_sided_long'
-                      ? t('job.duplex_long_full')
-                      : t('job.duplex_short_full')}
+                    {job.config.duplex === 'one_sided'
+                      ? t('job.config.duplex_one_full')
+                      : job.config.duplex === 'two_sided_long'
+                      ? t('job.config.duplex_long_full')
+                      : t('job.config.duplex_short_full')}
                   </span>
                 </Row>
                 <Row label={t('drawer.copies')}>
-                  <span className="text-sm text-slate-300">{job.copies}</span>
+                  <span className="text-sm text-slate-300">{job.config.copies}</span>
                 </Row>
                 {job.files[0]?.paper_format && (
                   <Row label={t('drawer.photo_size')}>

@@ -5,7 +5,6 @@ import { useTranslation } from 'react-i18next'
 import { Printer, Volume2, VolumeX, Loader2 } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { useUiStore } from '@/stores/uiStore'
-import { axiosClient } from '@/api/client'
 import { cn } from '@/lib/cn'
 
 export function LoginPage() {

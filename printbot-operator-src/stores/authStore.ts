@@ -3,9 +3,10 @@ import { create } from 'zustand'
 
 interface AuthState {
   apiKey: string | null
+  instanceUrl: string | null
   isAuthenticated: boolean
   audioInitialized: boolean
-  login: (key: string) => void
+  login: (key: string, instanceUrl: string) => void
   logout: () => void
   setAudioInitialized: () => void
 }
@@ -13,6 +14,7 @@ interface AuthState {
 export const useAuthStore = create<AuthState>((set) => ({
   // Відновлюємо сесію при перезавантаженні сторінки
   apiKey: sessionStorage.getItem('api_key'),
+  instanceUrl: sessionStorage.getItem('instance_url'),
   isAuthenticated: Boolean(sessionStorage.getItem('api_key')),
   audioInitialized: false,
 
