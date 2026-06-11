@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Header from "./components/Header";
 import MetricsRow from "./components/MetricsRow";
 import InstanceList from "./components/InstanceList";
@@ -30,10 +30,34 @@ export default function App() {
     }
   }, [filter, showToast]);
 
+  const wsRef = useRef(null);
+
   useEffect(() => {
     fetchInstances();
-    const interval = setInterval(fetchInstances, 10000);
-    return () => clearInterval(interval);
+
+    // WS для live-оновлень; fallback polling якщо WS недоступний
+    let fallback = null;
+    try {
+      const ws = api.wsConnect((msg) => {
+        if (msg.event === "status" || msg.event === "instance_updated") {
+          fetchInstances();
+        }
+      });
+      ws.onopen = () => {
+        if (fallback) { clearInterval(fallback); fallback = null; }
+      };
+      ws.onclose = () => {
+        fallback = setInterval(fetchInstances, 10000);
+      };
+      wsRef.current = ws;
+    } catch (_) {
+      fallback = setInterval(fetchInstances, 10000);
+    }
+
+    return () => {
+      wsRef.current?.close();
+      if (fallback) clearInterval(fallback);
+    };
   }, [fetchInstances]);
 
   const handleAction = async (id, action) => {
@@ -46,6 +70,12 @@ export default function App() {
         await api.deleteInstance(id);
         showToast(`✓ ${inst?.subdomain} видалено`, "success");
         if (selectedId === id) setSelectedId(null);
+      } else if (action === "maintenance_enable") {
+        await api.maintenance(id, "enable");
+        showToast(`⏸ maintenance → ${inst?.subdomain}`, "info");
+      } else if (action === "maintenance_disable") {
+        await api.maintenance(id, "disable");
+        showToast(`▶ active → ${inst?.subdomain}`, "success");
       } else {
         await api.action(id, action);
         showToast(`${action} → ${inst?.subdomain}`, "success");

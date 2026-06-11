@@ -100,4 +100,22 @@ export const api = {
   getOperatorInfo(id) {
     return request(`/api/instances/${id}/operator`);
   },
+  /** POST /api/instances/{id}/maintenance  body: { action: "enable"|"disable" } */
+  maintenance(id, action) {
+    return request(`/api/instances/${id}/maintenance`, {
+      method: "POST",
+      body: JSON.stringify({ action }),
+    });
+  },
+  /** WebSocket підключення до /api/ws */
+  wsConnect(onMessage) {
+    const protocol = location.protocol === "https:" ? "wss" : "ws";
+    const url = `${protocol}://${location.host}/api/ws`;
+    const ws = new WebSocket(url);
+    ws.onmessage = (e) => {
+      try { onMessage(JSON.parse(e.data)); } catch (_) {}
+    };
+    ws.onerror = () => {};
+    return ws;
+  },
 };

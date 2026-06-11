@@ -62,9 +62,15 @@ export default function DetailPanel({ instance, onClose, onAction }) {
 
       <div style={styles.grid}>
         <Field label="instance id"  value={instance.id} mono />
-        <Field label="status"       value={instance.status} />
+        <Field label="status"       value={instance.status} status={instance.status} />
         <Field label="created"      value={fmtDate(instance.created_at)} mono />
         <Field label="updated"      value={fmtDate(instance.updated_at)} mono />
+        {instance.billing_status && (
+          <Field label="billing" value={instance.billing_status} status={instance.billing_status} />
+        )}
+        {instance.subscription_expires_at && (
+          <Field label="expires" value={fmtDate(instance.subscription_expires_at)} mono />
+        )}
       </div>
 
       <OperatorBlock
@@ -105,7 +111,11 @@ export default function DetailPanel({ instance, onClose, onAction }) {
           <>
             <ActionBtn onClick={() => handleAction("stop")}>■ stop</ActionBtn>
             <ActionBtn onClick={() => handleAction("restart")}>↺ restart</ActionBtn>
+            <ActionBtn onClick={() => handleAction("maintenance_enable")}>⏸ maintenance</ActionBtn>
           </>
+        )}
+        {instance.status === "maintenance" && (
+          <ActionBtn onClick={() => handleAction("maintenance_disable")}>▶ leave maintenance</ActionBtn>
         )}
         {instance.status === "stopped" && (
           <ActionBtn onClick={() => handleAction("start")}>▶ start</ActionBtn>
@@ -118,11 +128,16 @@ export default function DetailPanel({ instance, onClose, onAction }) {
   );
 }
 
-function Field({ label, value, mono }) {
+function Field({ label, value, mono, status }) {
+  const statusColor = {
+    active: "var(--green)", maintenance: "var(--amber)",
+    suspended: "var(--red)", terminated: "var(--red)",
+    failed: "var(--red)", stopped: "var(--muted)",
+  }[status] || undefined;
   return (
     <div>
       <div style={fieldStyles.label}>{label}</div>
-      <div style={{ ...fieldStyles.value, ...(mono ? fieldStyles.mono : {}) }}>{value}</div>
+      <div style={{ ...fieldStyles.value, ...(mono ? fieldStyles.mono : {}), ...(statusColor ? { color: statusColor, fontWeight: 600 } : {}) }}>{value}</div>
     </div>
   );
 }
