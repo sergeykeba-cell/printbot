@@ -95,8 +95,28 @@ async def flush_aggregated_alerts() -> None:
         logger.warning("flush_aggregated_alerts: помилка: %s", e)
 
 
+QUEUE_OVERFLOW_THRESHOLD = 50
+
+
+async def _check_queue_size() -> None:
+    """Перевіряє розмір черги ARQ і надсилає алерт якщо переповнена."""
+    try:
+        r = _get_redis_client()
+        # ARQ зберігає задачі в ключі arq:queue
+        queue_len = await r.llen("arq:queue")
+        await r.aclose()
+        if queue_len >= QUEUE_OVERFLOW_THRESHOLD:
+            await send_aggregated_alert(
+                "queue_overflow",
+                f"⚠️ <b>Черга ARQ переповнена</b>\nЗадач у черзі: <b>{queue_len}</b> (поріг: {QUEUE_OVERFLOW_THRESHOLD})"
+            )
+    except Exception as e:
+        logger.warning("_check_queue_size: помилка: %s", e)
+
+
 async def _periodic_flush(interval_seconds: int = 600) -> None:
     """Фоновий loop для flush — запускається при старті воркера."""
     while True:
         await asyncio.sleep(interval_seconds)
         await flush_aggregated_alerts()
+        await _check_queue_size()
