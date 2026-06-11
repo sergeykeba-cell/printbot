@@ -51,7 +51,7 @@ export default function CreateModal({ onClose, onCreate, showToast }) {
             autoFocus
           />
           {errors.subdomain && <div style={styles.errMsg}>{errors.subdomain}</div>}
-          <div style={styles.hint}>→ {(subdomain || "subdomain").toLowerCase().trim()}.printbot.app</div>
+          <div style={styles.hint}>→ https://printbot-manager.duckdns.org/instance/{(subdomain || "subdomain").toLowerCase().trim()}</div>
         </div>
 
         <div style={styles.fieldGroup}>

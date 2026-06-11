@@ -18,6 +18,7 @@ import fitz  # PyMuPDF
 
 from sqlalchemy import select
 from app.database import AsyncSessionLocal
+from app.notify import send_admin_alert
 from app.models import PrintedFile, PrintJob
 
 logger = logging.getLogger(__name__)
@@ -269,6 +270,7 @@ async def process_incoming_file(ctx: dict, file_id: str) -> None:
                 file_rec.status = "failed"
                 file_rec.error_log = error_trace
                 await db.commit()
+        await send_admin_alert(f"❌ Помилка обробки файлу\nfile_id: <code>{file_id}</code>\n\n<pre>{error_trace[:2000]}</pre>")
 
 
 # ── Конфігурація ARQ воркера ──────────────────────────────────────
