@@ -39,6 +39,10 @@ router = APIRouter(
     tags=["Instance Management"],
     dependencies=[Depends(verify_manager_access)],  # Автентифікація на весь роутер
 )
+public_router = APIRouter(
+    prefix="/api/instances",
+    tags=["public"],
+)
 
 # ── Валідація субдомену ────────────────────────────────────────────
 # Закриває RCE через bash injection: дозволяє лише [a-z0-9-]
@@ -341,6 +345,27 @@ async def delete_instance(
         "subdomain": subdomain,
         "note": "Volumes збережено. Для повного видалення: docker compose -p printbot_{subdomain} down -v",
     }
+
+
+@public_router.get("/by-subdomain/{subdomain}/webform-key")
+async def get_webform_key(subdomain: str, db: AsyncSession = Depends(get_manager_db)):
+    """Публічний endpoint — повертає API ключ для веб-форми інстансу."""
+    instance = await db.scalar(
+        select(InstanceRegistry).where(InstanceRegistry.subdomain == subdomain)
+    )
+    if not instance:
+        raise HTTPException(status_code=404, detail="Інстанс не знайдено.")
+    env_path = f"/opt/printbot/instances/{subdomain}/.env"
+    api_key = None
+    try:
+        with open(env_path) as f:
+            for line in f:
+                if line.startswith("INSTANCE_API_KEY="):
+                    api_key = line.strip().split("=", 1)[1]
+                    break
+    except Exception:
+        raise HTTPException(status_code=500, detail="Не вдалось прочитати ключ.")
+    return {"api_key": api_key}
 
 @router.get("/{instance_id}/operator")
 async def get_operator_info(
