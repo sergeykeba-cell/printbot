@@ -44,6 +44,15 @@ def _secure_provisioning(subdomain: str, bot_token: str, db_password: str) -> No
     instance_api_key = _secrets.token_urlsafe(32)
     operator_secret = _secrets.token_urlsafe(16)
 
+    # Записуємо seed прайс-листа якщо існує (Варіант В)
+    seed_src = "/opt/printbot/manager/seed_prices.json"
+    seed_dst = f"{base_dir}/data/seed_prices.json"
+    os.makedirs(f"{base_dir}/data", exist_ok=True)
+    if os.path.exists(seed_src):
+        import shutil
+        shutil.copy2(seed_src, seed_dst)
+        os.chmod(seed_dst, 0o600)
+
     env_content = (
         f"SUBDOMAIN={subdomain}\n"
         f"TG_BOT_TOKEN={bot_token}\n"

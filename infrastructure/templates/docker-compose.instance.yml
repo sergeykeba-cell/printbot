@@ -46,6 +46,8 @@ services:
   api:
     image: printbot-backend:latest
     restart: unless-stopped
+    volumes:
+      - ./data:/app/seed:ro
     environment:
       DATABASE_URL: postgresql+asyncpg://print_user:${DB_PASSWORD}@db:5432/print_instance_db
       REDIS_URL: redis://redis:6379/0
@@ -107,3 +109,4 @@ networks:
 volumes:
   db_data:
     # Персистентні дані залишаються навіть після docker compose down
+  # seed — read-only mount з хоста, не персистентний том
