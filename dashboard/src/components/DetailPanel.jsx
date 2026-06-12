@@ -56,7 +56,7 @@ export default function DetailPanel({ instance, onClose, onAction }) {
   return (
     <div style={styles.panel}>
       <div style={styles.header}>
-        <div style={styles.title}>{instance.subdomain}.printbot.app</div>
+        <div style={styles.title}>{instance.subdomain}</div>
         <button style={styles.closeBtn} onClick={onClose} aria-label="Закрити">✕</button>
       </div>
 
@@ -78,6 +78,7 @@ export default function DetailPanel({ instance, onClose, onAction }) {
         loading={opLoading}
         status={instance.status}
         instanceApiUrl={`https://printbot-manager.duckdns.org/instance/${instance.subdomain}`}
+        instance={instance}
         copied={copied}
         onCopy={copyCmd}
         onRefresh={fetchOperator}
@@ -196,7 +197,7 @@ function ActionBtn({ children, onClick, disabled, title }) {
 }
 
 
-function OperatorBlock({ info, loading, status, instanceApiUrl, copied, onCopy, onRefresh }) {
+function OperatorBlock({ info, loading, status, instanceApiUrl, instance, copied, onCopy, onRefresh }) {
   if (status !== "active") return null;
 
   return (
