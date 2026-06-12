@@ -25,7 +25,7 @@ from app.security import decrypt_secret, encrypt_secret
 
 # ── Синхронний блок: файлові та системні операції ─────────────────
 
-def _secure_provisioning(subdomain: str, bot_token: str, db_password: str) -> None:
+def _secure_provisioning(subdomain: str, bot_token: str, db_password: str, price_list: dict | None = None) -> None:
     """
     Виконується в окремому потоці через asyncio.to_thread().
     Містить усі блокуючі виклики: файлова система + subprocess.
@@ -44,14 +44,22 @@ def _secure_provisioning(subdomain: str, bot_token: str, db_password: str) -> No
     instance_api_key = _secrets.token_urlsafe(32)
     operator_secret = _secrets.token_urlsafe(16)
 
-    # Записуємо seed прайс-листа якщо існує (Варіант В)
-    seed_src = "/opt/printbot/manager/seed_prices.json"
-    seed_dst = f"{base_dir}/data/seed_prices.json"
+    # Записуємо seed прайс-листа (Варіант В)
     os.makedirs(f"{base_dir}/data", exist_ok=True)
-    if os.path.exists(seed_src):
-        import shutil
-        shutil.copy2(seed_src, seed_dst)
-        os.chmod(seed_dst, 0o600)
+    seed_dst = f"{base_dir}/data/seed_prices.json"
+    if price_list is not None:
+        # Прайс переданий при створенні інстансу — пріоритет
+        import json as _json
+        fd = os.open(seed_dst, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f:
+            _json.dump(price_list, f, ensure_ascii=False, indent=2)
+    else:
+        # Fallback — глобальний шаблон якщо є
+        seed_src = "/opt/printbot/manager/seed_prices.json"
+        if os.path.exists(seed_src):
+            import shutil
+            shutil.copy2(seed_src, seed_dst)
+            os.chmod(seed_dst, 0o600)
 
     env_content = (
         f"SUBDOMAIN={subdomain}\n"
@@ -155,7 +163,7 @@ def _wait_for_healthy(subdomain: str, timeout: int = 60, interval: int = 5) -> N
 
 # ── Асинхронна ARQ задача ──────────────────────────────────────────
 
-async def deploy_instance(ctx: dict, instance_id: str) -> None:
+async def deploy_instance(ctx: dict, instance_id: str, price_list: dict | None = None) -> None:
     """
     ARQ задача. Отримує лише instance_id, самостійно читає
     і дешифрує секрети з БД Менеджера.
@@ -175,7 +183,7 @@ async def deploy_instance(ctx: dict, instance_id: str) -> None:
             db_password = decrypt_secret(instance.encrypted_db_password)
 
         # Блокуючий I/O у окремому потоці: деплой + очікування healthy
-        operator_secret = await asyncio.to_thread(_secure_provisioning, subdomain, bot_token, db_password)
+        operator_secret = await asyncio.to_thread(_secure_provisioning, subdomain, bot_token, db_password, price_list)
         await asyncio.to_thread(_wait_for_healthy, subdomain)
 
         # Сесія 2: оновлюємо статус на "active"

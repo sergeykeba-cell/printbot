@@ -54,6 +54,7 @@ _SUBDOMAIN_RE = re.compile(r"^[a-z0-9][a-z0-9\-]{1,61}[a-z0-9]$")
 class CreateInstanceSchema(BaseModel):
     subdomain: str = Field(..., min_length=3, max_length=63)
     tg_bot_token: str = Field(..., min_length=20)
+    price_list: dict | None = Field(None, description="JSON прайс-лист для seed при старті інстансу")
 
     @field_validator("subdomain")
     @classmethod
@@ -164,7 +165,7 @@ async def create_new_print_shop(
     await db.refresh(new_instance)
 
     # В чергу йде ТІЛЬКИ instance_id — секрети не потрапляють в Redis
-    await redis_pool.enqueue_job("deploy_instance", new_instance.id)
+    await redis_pool.enqueue_job("deploy_instance", new_instance.id, payload.price_list)
 
     return {
         "status": "accepted",
