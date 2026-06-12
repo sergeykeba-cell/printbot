@@ -61,10 +61,14 @@ export const api = {
   },
 
   /** POST /api/instances/create */
-  create(subdomain, tgBotToken) {
+  create(subdomain, tgBotToken, priceList = null) {
     return request("/api/instances/create", {
       method: "POST",
-      body: JSON.stringify({ subdomain, tg_bot_token: tgBotToken }),
+      body: JSON.stringify({
+        subdomain,
+        tg_bot_token: tgBotToken,
+        ...(priceList ? { price_list: priceList } : {}),
+      }),
     });
   },
 

@@ -86,9 +86,9 @@ export default function App() {
     }
   };
 
-  const handleCreate = async (subdomain, tgBotToken) => {
+  const handleCreate = async (subdomain, tgBotToken, priceList = null) => {
     try {
-      const result = await api.create(subdomain, tgBotToken);
+      const result = await api.create(subdomain, tgBotToken, priceList);
       setCreateOpen(false);
       showToast(`⟳ деплой запущено: ${subdomain}.printbot.app`, "info");
       await fetchInstances();
