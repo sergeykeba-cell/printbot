@@ -14,6 +14,7 @@ orchestrator.py — REST API Менеджера інстансів.
   - Regex валідація субдомену (закриває RCE через bash injection)
   - InstanceAction Enum (закриває docker command injection)
   - Секрети в Pydantic response схемах НІКОЛИ не повертаються
+  - Sybil-захист: один Free-інстанс на Telegram-акаунт (в одній транзакції)
 """
 
 import os
@@ -25,9 +26,8 @@ from enum import Enum
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.manager_db import get_manager_db, get_redis_pool
@@ -37,7 +37,7 @@ from app.security import encrypt_secret, decrypt_secret, verify_manager_access
 router = APIRouter(
     prefix="/api/instances",
     tags=["Instance Management"],
-    dependencies=[Depends(verify_manager_access)],  # Автентифікація на весь роутер
+    dependencies=[Depends(verify_manager_access)],
 )
 public_router = APIRouter(
     prefix="/api/instances",
@@ -45,7 +45,6 @@ public_router = APIRouter(
 )
 
 # ── Валідація субдомену ────────────────────────────────────────────
-# Закриває RCE через bash injection: дозволяє лише [a-z0-9-]
 _SUBDOMAIN_RE = re.compile(r"^[a-z0-9][a-z0-9\-]{1,61}[a-z0-9]$")
 
 
@@ -54,7 +53,23 @@ _SUBDOMAIN_RE = re.compile(r"^[a-z0-9][a-z0-9\-]{1,61}[a-z0-9]$")
 class CreateInstanceSchema(BaseModel):
     subdomain: str = Field(..., min_length=3, max_length=63)
     tg_bot_token: str = Field(..., min_length=20)
-    price_list: dict | None = Field(None, description="JSON прайс-лист для seed при старті інстансу")
+    price_list: dict | None = Field(
+        None, description="JSON прайс-лист для seed при старті інстансу"
+    )
+
+    # Telegram ID власника — обов'язковий, позитивне ціле число.
+    # gt=0 відхиляє null (Pydantic required) і від'ємні/нульові значення.
+    owner_telegram_id: int = Field(
+        ...,
+        gt=0,
+        description="Telegram ID власника (з Telegram Login Widget або бота)",
+    )
+
+    # Тарифний план: 'free' | 'start' | 'business'
+    plan_tier: str = Field(default="free")
+
+    # Демо-інстанс не рахується у Free-ліміт
+    is_demo: bool = Field(default=False)
 
     @field_validator("subdomain")
     @classmethod
@@ -67,12 +82,23 @@ class CreateInstanceSchema(BaseModel):
             )
         return v
 
+    @field_validator("plan_tier")
+    @classmethod
+    def validate_plan_tier(cls, v: str) -> str:
+        allowed = {"free", "start", "business"}
+        if v not in allowed:
+            raise ValueError(f"plan_tier має бути одним з: {allowed}")
+        return v
+
 
 class InstanceResponse(BaseModel):
     """Публічне представлення інстансу — БЕЗ секретів."""
     id: str
     subdomain: str
     status: str
+    plan_tier: str
+    is_demo: bool
+    owner_telegram_id: Optional[int]
     error_log: Optional[str]
     created_at: str
     updated_at: str
@@ -83,6 +109,9 @@ class InstanceResponse(BaseModel):
             id=inst.id,
             subdomain=inst.subdomain,
             status=inst.status,
+            plan_tier=inst.plan_tier,
+            is_demo=inst.is_demo,
+            owner_telegram_id=inst.owner_telegram_id,
             error_log=inst.error_log,
             created_at=inst.created_at.isoformat(),
             updated_at=inst.updated_at.isoformat(),
@@ -92,8 +121,7 @@ class InstanceResponse(BaseModel):
 class InstanceAction(str, Enum):
     """
     Дозволені дії над інстансом.
-    Enum закриває docker command injection — будь-яке інше значення
-    відхиляється Pydantic на рівні валідації.
+    Enum закриває docker command injection.
     """
     stop = "stop"
     start = "start"
@@ -104,7 +132,49 @@ class ActionSchema(BaseModel):
     action: InstanceAction
 
 
-# ── Допоміжна функція: виконати docker compose команду ────────────
+# ── Допоміжна функція: Sybil-перевірка ────────────────────────────
+
+async def _check_sybil(
+    db: AsyncSession,
+    owner_telegram_id: int,
+    plan_tier: str,
+    is_demo: bool,
+) -> None:
+    """
+    Перевіряє, чи є у користувача вже активний Free-інстанс.
+
+    Умови перевірки:
+      - plan_tier == 'free' (платні тарифи не обмежуються)
+      - is_demo == False (демо не рахується)
+      - owner_telegram_id > 0 (валідується Pydantic, але перевіряємо і тут)
+
+    Викликається ВСЕРЕДИНІ транзакції create_new_print_shop, тому
+    check + insert атомарні — race condition виключено.
+
+    Raises:
+        HTTPException 409 — якщо Free-інстанс вже існує.
+    """
+    if plan_tier != "free" or is_demo:
+        return  # Sybil-перевірка не застосовується
+
+    existing = await db.scalar(
+        select(InstanceRegistry).where(
+            InstanceRegistry.owner_telegram_id == owner_telegram_id,
+            InstanceRegistry.plan_tier == "free",
+            InstanceRegistry.is_demo.is_(False),
+        ).limit(1)
+    )
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "A free instance is already associated with this Telegram account. "
+                "Please upgrade the existing instance or contact support."
+            ),
+        )
+
+
+# ── Допоміжні функції: docker compose ─────────────────────────────
 
 def _run_compose_action(subdomain: str, action: str, timeout: int = 30) -> str:
     """Синхронна; викликається через asyncio.to_thread()."""
@@ -132,7 +202,7 @@ def _get_docker_logs(subdomain: str, tail: int = 100, timeout: int = 15) -> str:
         cwd=project_dir,
         capture_output=True,
         text=True,
-        timeout=timeout,  # Захист від зависання при поганому стані контейнера
+        timeout=timeout,
     )
     return result.stdout + result.stderr
 
@@ -145,31 +215,58 @@ async def create_new_print_shop(
     db: AsyncSession = Depends(get_manager_db),
     redis_pool=Depends(get_redis_pool),
 ):
-    # Перевірка унікальності субдомену
-    existing = await db.scalar(
-        select(InstanceRegistry).where(InstanceRegistry.subdomain == payload.subdomain)
-    )
-    if existing:
-        raise HTTPException(status_code=400, detail="Цей субдомен вже використовується.")
+    """
+    Створює новий інстанс точки печати.
 
-    db_password = secrets.token_urlsafe(24)
+    Транзакція включає:
+      1. Перевірку унікальності субдомену
+      2. Sybil-перевірку (один Free на Telegram-акаунт)
+      3. INSERT нового інстансу
 
-    new_instance = InstanceRegistry(
-        subdomain=payload.subdomain,
-        encrypted_tg_bot_token=encrypt_secret(payload.tg_bot_token),
-        encrypted_db_password=encrypt_secret(db_password),
-        status="provisioning",
-    )
-    db.add(new_instance)
-    await db.commit()
-    await db.refresh(new_instance)
+    Всі три кроки виконуються в одній транзакції — race condition виключено.
+    """
+    async with db.begin():
+        # 1. Унікальність субдомену
+        existing = await db.scalar(
+            select(InstanceRegistry).where(
+                InstanceRegistry.subdomain == payload.subdomain
+            )
+        )
+        if existing:
+            raise HTTPException(
+                status_code=400,
+                detail="Цей субдомен вже використовується.",
+            )
 
-    # В чергу йде ТІЛЬКИ instance_id — секрети не потрапляють в Redis
-    await redis_pool.enqueue_job("deploy_instance", new_instance.id, payload.price_list)
+        # 2. Sybil-перевірка (тільки для Free, не для демо)
+        await _check_sybil(
+            db,
+            owner_telegram_id=payload.owner_telegram_id,
+            plan_tier=payload.plan_tier,
+            is_demo=payload.is_demo,
+        )
+
+        # 3. Створення запису
+        db_password = secrets.token_urlsafe(24)
+        new_instance = InstanceRegistry(
+            subdomain=payload.subdomain,
+            encrypted_tg_bot_token=encrypt_secret(payload.tg_bot_token),
+            encrypted_db_password=encrypt_secret(db_password),
+            status="provisioning",
+            owner_telegram_id=payload.owner_telegram_id,
+            plan_tier=payload.plan_tier,
+            is_demo=payload.is_demo,
+        )
+        db.add(new_instance)
+        await db.flush()   # отримуємо id до commit
+        instance_id = new_instance.id
+
+    # Поза транзакцією — в чергу йде ТІЛЬКИ instance_id
+    await redis_pool.enqueue_job("deploy_instance", instance_id, payload.price_list)
 
     return {
         "status": "accepted",
-        "instance_id": new_instance.id,
+        "instance_id": instance_id,
         "url": f"https://{payload.subdomain}.printbot.app",
     }
 
@@ -187,7 +284,9 @@ async def list_instances(
     if status_filter:
         allowed = {"provisioning", "active", "failed", "stopped"}
         if status_filter not in allowed:
-            raise HTTPException(status_code=400, detail=f"Невідомий статус: {status_filter}")
+            raise HTTPException(
+                status_code=400, detail=f"Невідомий статус: {status_filter}"
+            )
         query = query.where(InstanceRegistry.status == status_filter)
 
     query = query.limit(limit).offset(offset)
@@ -202,10 +301,6 @@ async def get_instance_logs(
     tail: int = 100,
     db: AsyncSession = Depends(get_manager_db),
 ):
-    """
-    Якщо статус 'failed' — повертає error_log з БД.
-    Якщо статус 'active'/'stopped' — виконує docker compose logs --tail=N.
-    """
     instance = await db.scalar(
         select(InstanceRegistry).where(InstanceRegistry.id == instance_id)
     )
@@ -219,21 +314,14 @@ async def get_instance_logs(
             "logs": instance.error_log or "Лог відсутній.",
         }
 
-    # Для активних/зупинених — живі логи з docker compose
     try:
-        logs = await asyncio.to_thread(
-            _get_docker_logs, instance.subdomain, tail
-        )
+        logs = await asyncio.to_thread(_get_docker_logs, instance.subdomain, tail)
     except subprocess.TimeoutExpired:
         raise HTTPException(status_code=504, detail="Таймаут отримання логів.")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-    return {
-        "source": "docker_compose",
-        "subdomain": instance.subdomain,
-        "logs": logs,
-    }
+    return {"source": "docker_compose", "subdomain": instance.subdomain, "logs": logs}
 
 
 @router.post("/{instance_id}/retry", status_code=status.HTTP_202_ACCEPTED)
@@ -248,7 +336,6 @@ async def retry_failed_provisioning(
     if not instance:
         raise HTTPException(status_code=404, detail="Інстанс не знайдено")
 
-    # Блокуємо double-retry: тільки з "failed" статусу дозволено перезапуск
     if instance.status in ("active", "provisioning"):
         raise HTTPException(
             status_code=400,
@@ -258,8 +345,6 @@ async def retry_failed_provisioning(
     instance.status = "provisioning"
     instance.error_log = None
     await db.commit()
-
-    # Тільки ID — секрети воркер читає сам з БД
     await redis_pool.enqueue_job("deploy_instance", instance.id)
     return {"status": "retrying", "instance_id": instance_id}
 
@@ -270,11 +355,6 @@ async def instance_lifecycle_action(
     payload: ActionSchema,
     db: AsyncSession = Depends(get_manager_db),
 ):
-    """
-    Lifecycle керування: stop / start / restart.
-    InstanceAction Enum відхиляє будь-яку команду поза білим списком —
-    захист від docker command injection (наприклад 'down --volumes').
-    """
     instance = await db.scalar(
         select(InstanceRegistry).where(InstanceRegistry.id == instance_id)
     )
@@ -283,7 +363,8 @@ async def instance_lifecycle_action(
 
     if instance.status == "provisioning":
         raise HTTPException(
-            status_code=400, detail="Неможливо керувати інстансом під час провізіонінгу."
+            status_code=400,
+            detail="Неможливо керувати інстансом під час провізіонінгу.",
         )
 
     try:
@@ -295,7 +376,6 @@ async def instance_lifecycle_action(
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-    # Оновлюємо статус після stop
     if payload.action == InstanceAction.stop:
         instance.status = "stopped"
         await db.commit()
@@ -312,12 +392,6 @@ async def delete_instance(
     confirm: bool = False,
     db: AsyncSession = Depends(get_manager_db),
 ):
-    """
-    Видаляє запис з реєстру.
-    Зупиняє контейнери але НЕ видаляє volumes (дані в безпеці).
-    Для повного знесення — окрема ручна операція 'docker compose down -v'.
-    Потрібен query param: ?confirm=true
-    """
     if not confirm:
         raise HTTPException(
             status_code=400,
@@ -331,12 +405,10 @@ async def delete_instance(
         raise HTTPException(status_code=404, detail="Інстанс не знайдено")
 
     subdomain = instance.subdomain
-
-    # Зупиняємо контейнери (без видалення volumes)
     try:
         await asyncio.to_thread(_run_compose_action, subdomain, "stop")
     except Exception:
-        pass  # Якщо вже зупинено — ігноруємо
+        pass
 
     await db.delete(instance)
     await db.commit()
@@ -344,13 +416,14 @@ async def delete_instance(
     return {
         "status": "deleted",
         "subdomain": subdomain,
-        "note": "Volumes збережено. Для повного видалення: docker compose -p printbot_{subdomain} down -v",
+        "note": f"Volumes збережено. Для повного видалення: docker compose -p printbot_{subdomain} down -v",
     }
 
 
 @public_router.get("/by-subdomain/{subdomain}/webform-key")
-async def get_webform_key(subdomain: str, db: AsyncSession = Depends(get_manager_db)):
-    """Публічний endpoint — повертає API ключ для веб-форми інстансу."""
+async def get_webform_key(
+    subdomain: str, db: AsyncSession = Depends(get_manager_db)
+):
     instance = await db.scalar(
         select(InstanceRegistry).where(InstanceRegistry.subdomain == subdomain)
     )
@@ -368,12 +441,12 @@ async def get_webform_key(subdomain: str, db: AsyncSession = Depends(get_manager
         raise HTTPException(status_code=500, detail="Не вдалось прочитати ключ.")
     return {"api_key": api_key}
 
+
 @router.get("/{instance_id}/operator")
 async def get_operator_info(
     instance_id: str,
     db: AsyncSession = Depends(get_manager_db),
 ):
-    """Повертає дані для налаштування оператора інстансу."""
     instance = await db.scalar(
         select(InstanceRegistry).where(InstanceRegistry.id == instance_id)
     )
@@ -386,9 +459,7 @@ async def get_operator_info(
     if instance.encrypted_operator_secret:
         operator_secret = decrypt_secret(instance.encrypted_operator_secret)
 
-    # Читаємо INSTANCE_API_KEY з .env інстансу
     instance_api_key = None
-    import os
     env_path = f"/opt/printbot/instances/{instance.subdomain}/.env"
     if os.path.exists(env_path):
         with open(env_path) as f:
@@ -408,7 +479,6 @@ async def get_operator_info(
     }
 
 
-
 # ── WebSocket: live статус інстансу ───────────────────────────────
 
 from fastapi import WebSocket, WebSocketDisconnect
@@ -417,7 +487,6 @@ from app.ws_manager import ws_manager
 
 @router.websocket("/{instance_id}/ws")
 async def websocket_status(instance_id: str, ws: WebSocket):
-    """Live-стрім змін статусу інстансу для операторської панелі."""
     await ws_manager.connect(instance_id, ws)
     try:
         while True:
@@ -443,10 +512,6 @@ async def instance_maintenance(
     payload: MaintenanceSchema,
     db: AsyncSession = Depends(get_manager_db),
 ):
-    """
-    enter — переводить інстанс у статус 'maintenance'.
-    leave — повертає у 'active'.
-    """
     instance = await db.scalar(
         select(InstanceRegistry).where(InstanceRegistry.id == instance_id)
     )
@@ -461,10 +526,11 @@ async def instance_maintenance(
             )
         instance.status = "maintenance"
         await db.commit()
-        await ws_manager.broadcast(instance_id, {"event": "status", "status": "maintenance"})
+        await ws_manager.broadcast(
+            instance_id, {"event": "status", "status": "maintenance"}
+        )
         return {"status": "maintenance", "instance_id": instance_id}
 
-    # leave
     if instance.status != "maintenance":
         raise HTTPException(
             status_code=400,

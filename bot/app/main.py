@@ -1,13 +1,13 @@
 """
 main.py — FastAPI застосунок бота точки печати.
 """
-
 import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from app.router import router
+from app.api.internal import router as internal_router
+from app.middleware.plan_enforcement import PlanEnforcementMiddleware
 from app.database import init_db, init_redis, close_redis
-
 
 async def _load_seed_prices():
     """
@@ -18,16 +18,13 @@ async def _load_seed_prices():
     from pathlib import Path
     from sqlalchemy import text
     from app.database import AsyncSessionLocal
-
     seed_path = Path("/app/seed/seed_prices.json")
     if not seed_path.exists():
         return
-
     async with AsyncSessionLocal() as db:
         count = await db.scalar(text("SELECT COUNT(*) FROM print_prices"))
         if count and count > 0:
             return  # Прайс вже є — не перезаписуємо
-
         try:
             data = json.loads(seed_path.read_text())
             prices = data.get("print_prices", [])
@@ -57,7 +54,6 @@ async def _load_seed_prices():
         except Exception as e:
             print(f"[seed] Помилка імпорту прайсу: {e}")
 
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
@@ -65,7 +61,6 @@ async def lifespan(app: FastAPI):
     await _load_seed_prices()
     yield
     await close_redis()
-
 
 app = FastAPI(
     title="PrintBot Instance",
@@ -76,8 +71,10 @@ app = FastAPI(
     redoc_url=None,
 )
 
-app.include_router(router)
+app.add_middleware(PlanEnforcementMiddleware)
 
+app.include_router(router)
+app.include_router(internal_router)
 
 @app.get("/health")
 async def health():
