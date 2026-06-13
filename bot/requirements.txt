@@ -10,3 +10,5 @@ PyMuPDF>=1.24.0
 python-dotenv>=1.0.0
 python-multipart>=0.0.9
 aiohttp
+slowapi>=0.1.9
+limits>=3.6.0

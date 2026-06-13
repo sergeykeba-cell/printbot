@@ -1,5 +1,12 @@
 """
 main.py — FastAPI застосунок бота точки печати.
+
+Зміни відносно попередньої версії:
+  - install_rate_limit_handlers(app) підключає slowapi limiter,
+    SlowAPIMiddleware та 429 exception handler.
+  - PlanEnforcementMiddleware залишається — обробляє 402 для Free-тарифу.
+  - Порядок middleware важливий: SlowAPIMiddleware має бути першим
+    (додається останнім через add_middleware LIFO).
 """
 import os
 from contextlib import asynccontextmanager
@@ -7,7 +14,9 @@ from fastapi import FastAPI
 from app.router import router
 from app.api.internal import router as internal_router
 from app.middleware.plan_enforcement import PlanEnforcementMiddleware
+from app.core.rate_limiter import install_rate_limit_handlers
 from app.database import init_db, init_redis, close_redis
+
 
 async def _load_seed_prices():
     """
@@ -18,13 +27,15 @@ async def _load_seed_prices():
     from pathlib import Path
     from sqlalchemy import text
     from app.database import AsyncSessionLocal
+
     seed_path = Path("/app/seed/seed_prices.json")
     if not seed_path.exists():
         return
+
     async with AsyncSessionLocal() as db:
         count = await db.scalar(text("SELECT COUNT(*) FROM print_prices"))
         if count and count > 0:
-            return  # Прайс вже є — не перезаписуємо
+            return
         try:
             data = json.loads(seed_path.read_text())
             prices = data.get("print_prices", [])
@@ -54,6 +65,7 @@ async def _load_seed_prices():
         except Exception as e:
             print(f"[seed] Помилка імпорту прайсу: {e}")
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
@@ -61,6 +73,7 @@ async def lifespan(app: FastAPI):
     await _load_seed_prices()
     yield
     await close_redis()
+
 
 app = FastAPI(
     title="PrintBot Instance",
@@ -71,10 +84,19 @@ app = FastAPI(
     redoc_url=None,
 )
 
+# ── Rate limiting (slowapi) — підключаємо першим ──────────────────
+# install_rate_limit_handlers додає SlowAPIMiddleware через add_middleware.
+# FastAPI/Starlette застосовує middleware у зворотному порядку додавання (LIFO),
+# тому SlowAPIMiddleware (додана тут) спрацює ПЕРШОЮ при вхідному запиті.
+install_rate_limit_handlers(app)
+
+# ── Plan enforcement (Free-tier 402) ──────────────────────────────
 app.add_middleware(PlanEnforcementMiddleware)
 
+# ── Роутери ───────────────────────────────────────────────────────
 app.include_router(router)
 app.include_router(internal_router)
+
 
 @app.get("/health")
 async def health():

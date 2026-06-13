@@ -1,5 +1,12 @@
 """
 router.py — FastAPI ендпоінти для прийому та керування файлами друку.
+
+Зміни відносно попередньої версії:
+  - Імпортовано limiter з app.core.rate_limiter.
+  - Додано @limiter.limit() декоратори на критичні ендпоінти:
+      POST /api/print/jobs   → 20/minute (створення замовлень)
+      POST /api/print/upload → 10/minute (завантаження файлів)
+  - Декоратор @limiter.limit() ЗАВЖДИ іде після @router.<method>().
 """
 
 import logging
@@ -11,7 +18,7 @@ import uuid
 from pathlib import Path
 
 import aiofiles
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, Security, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, Request, Security, status
 from pydantic import BaseModel, field_validator
 from fastapi.security import APIKeyHeader
 from sqlalchemy import select
@@ -28,10 +35,12 @@ from app.schemas import (
     PrintJobResponse,
     FileUploadResponse,
 )
+from app.core.rate_limiter import limiter
 
 logger = logging.getLogger(__name__)
 
 _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
 
 async def _verify_key(
     api_key_header: str = Security(_api_key_header),
@@ -43,11 +52,13 @@ async def _verify_key(
         raise HTTPException(status_code=403, detail="Доступ заборонено.")
     return key
 
+
 router = APIRouter(
     prefix="/api/print",
     tags=["Print"],
     dependencies=[Depends(_verify_key)],
 )
+
 UPLOAD_BASE = Path(os.environ.get("UPLOAD_DIR", "/app/uploads")).resolve()
 UPLOAD_BASE.mkdir(parents=True, exist_ok=True)
 CHUNK_SIZE = 256 * 1024
@@ -86,12 +97,17 @@ def _validate_mime(filename: str, content_type: str) -> str:
     return mime
 
 
+# ── Ендпоінти ──────────────────────────────────────────────────────
+
 @router.post("/jobs", status_code=status.HTTP_201_CREATED, response_model=PrintJobResponse)
+@limiter.limit("20/minute")
 async def create_job(
+    request: Request,                          # обов'язковий для slowapi
     config: PrintConfigSchema,
     user_id: int = Query(..., description="Telegram user ID"),
     db: AsyncSession = Depends(get_db),
 ):
+    """Створення замовлення. Ліміт: 20 запитів/хвилину на IP."""
     job = PrintJob(
         user_id=user_id,
         copies=config.copies,
@@ -102,24 +118,32 @@ async def create_job(
     )
     db.add(job)
     await db.commit()
-    result = await db.execute(select(PrintJob).options(selectinload(PrintJob.files)).where(PrintJob.id == job.id))
+    result = await db.execute(
+        select(PrintJob).options(selectinload(PrintJob.files)).where(PrintJob.id == job.id)
+    )
     job = result.scalar_one()
     logger.info("Створено замовлення job_id=%s user_id=%s", job.id, user_id)
     return PrintJobResponse.from_orm(job)
 
 
 @router.post("/upload", status_code=status.HTTP_202_ACCEPTED, response_model=FileUploadResponse)
+@limiter.limit("10/minute")
 async def upload_file(
+    request: Request,                          # обов'язковий для slowapi
     job_id: str = Query(..., description="ID замовлення"),
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     redis=Depends(get_redis_pool),
 ):
+    """Завантаження файлу. Ліміт: 10 запитів/хвилину на IP."""
     job = await db.scalar(select(PrintJob).where(PrintJob.id == job_id))
     if not job:
         raise HTTPException(status_code=404, detail="Замовлення не знайдено.")
     if job.status not in ("draft", "processing"):
-        raise HTTPException(status_code=400, detail=f"Неможливо додати файл до замовлення зі статусом '{job.status}'.")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Неможливо додати файл до замовлення зі статусом '{job.status}'.",
+        )
 
     mime = _validate_mime(file.filename or "unknown", file.content_type or "")
     safe_name = _safe_filename(file.filename or "unknown")
@@ -138,7 +162,11 @@ async def upload_file(
                     break
                 total_size += len(chunk)
                 if total_size > MAX_FILE_SIZE:
-                    raise HTTPException(status_code=413, detail=f"Файл перевищує максимальний розмір ({MAX_FILE_SIZE // 1024 // 1024} МБ).")
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"Файл перевищує максимальний розмір "
+                               f"({MAX_FILE_SIZE // 1024 // 1024} МБ).",
+                    )
                 await out.write(chunk)
         tmp_path.rename(file_path)
     except HTTPException:
@@ -186,12 +214,17 @@ async def get_job(job_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.patch("/jobs/{job_id}", response_model=PrintJobResponse)
-async def update_job(job_id: str, config: PrintConfigSchema, db: AsyncSession = Depends(get_db)):
+async def update_job(
+    job_id: str, config: PrintConfigSchema, db: AsyncSession = Depends(get_db)
+):
     job = await db.scalar(select(PrintJob).where(PrintJob.id == job_id))
     if not job:
         raise HTTPException(status_code=404, detail="Замовлення не знайдено.")
     if job.status not in ("draft", "processing", "ready_to_print"):
-        raise HTTPException(status_code=400, detail=f"Неможливо змінити замовлення зі статусом '{job.status}'.")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Неможливо змінити замовлення зі статусом '{job.status}'.",
+        )
     job.copies = config.copies
     job.duplex = config.duplex
     job.color_mode = config.color_mode
@@ -199,7 +232,9 @@ async def update_job(job_id: str, config: PrintConfigSchema, db: AsyncSession = 
     job.orientation = config.orientation
     job.photo_size = config.photo_size
     await db.commit()
-    result = await db.execute(select(PrintJob).options(selectinload(PrintJob.files)).where(PrintJob.id == job.id))
+    result = await db.execute(
+        select(PrintJob).options(selectinload(PrintJob.files)).where(PrintJob.id == job.id)
+    )
     job = result.scalar_one()
     return PrintJobResponse.from_orm(job)
 
@@ -210,7 +245,9 @@ async def cancel_job(job_id: str, db: AsyncSession = Depends(get_db)):
     if not job:
         raise HTTPException(status_code=404, detail="Замовлення не знайдено.")
     if job.status == "printed":
-        raise HTTPException(status_code=400, detail="Неможливо скасувати надруковане замовлення.")
+        raise HTTPException(
+            status_code=400, detail="Неможливо скасувати надруковане замовлення."
+        )
     job.status = "failed"
     await db.commit()
     logger.info("Замовлення скасовано: job_id=%s", job_id)
@@ -221,6 +258,7 @@ async def cancel_job(job_id: str, db: AsyncSession = Depends(get_db)):
 async def download_file(file_id: str, db: AsyncSession = Depends(get_db)):
     """Повертає файл для скачування оператором."""
     from fastapi.responses import FileResponse
+
     file_rec = await db.scalar(select(PrintedFile).where(PrintedFile.id == file_id))
     if not file_rec:
         raise HTTPException(status_code=404, detail="Файл не знайдено.")
@@ -233,19 +271,25 @@ async def download_file(file_id: str, db: AsyncSession = Depends(get_db)):
         media_type=file_rec.mime_type,
     )
 
+
 @router.get("/jobs", response_model=list[PrintJobResponse])
 async def list_jobs(
     status_filter: str | None = Query(None, description="Фільтр по статусу"),
     limit: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
 ):
-    query = select(PrintJob).options(selectinload(PrintJob.files)).order_by(PrintJob.created_at.desc())
+    query = (
+        select(PrintJob)
+        .options(selectinload(PrintJob.files))
+        .order_by(PrintJob.created_at.desc())
+    )
     if status_filter:
         query = query.where(PrintJob.status == status_filter)
     query = query.limit(limit)
     result = await db.execute(query)
     jobs = result.scalars().all()
     return [PrintJobResponse.from_orm(j) for j in jobs]
+
 
 class StatusUpdate(BaseModel):
     status: str
