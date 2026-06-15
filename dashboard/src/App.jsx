@@ -90,7 +90,7 @@ export default function App() {
     try {
       const result = await api.create(subdomain, tgBotToken, priceList);
       setCreateOpen(false);
-      showToast(`⟳ деплой запущено: ${subdomain}.printbot.app`, "info");
+      showToast(`⟳ деплой запущено: ${subdomain}`, "info");
       await fetchInstances();
       return result;
     } catch (e) {
