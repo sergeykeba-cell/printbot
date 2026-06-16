@@ -1,0 +1,87 @@
+server {
+    listen 80;
+    server_name printbot-manager.duckdns.org;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name printbot-manager.duckdns.org;
+
+    ssl_certificate     /etc/letsencrypt/live/printbot-manager.duckdns.org/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/printbot-manager.duckdns.org/privkey.pem;
+    # Security headers
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+
+    auth_basic "PrintBot Manager";
+    auth_basic_user_file /etc/nginx/.htpasswd_printbot_manager;
+
+    root /opt/printbot/dashboard/dist;
+    index index.html;
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:8081/api/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-API-Key "RyWUtWY1nAEA3yK7RWV6GCyv0ygpZq4lVqV6-VQ9gOQ";
+    }
+
+    location /health {
+        proxy_pass http://127.0.0.1:8081/health;
+    }
+
+    location /instance/test-shop/ {
+        proxy_pass http://127.0.0.1:8091/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        add_header 'Access-Control-Allow-Origin' 'https://printbot-operator.duckdns.org' always;
+        add_header 'Access-Control-Allow-Methods' 'GET, POST, PATCH, DELETE, OPTIONS' always;
+        add_header 'Access-Control-Allow-Headers' 'X-API-Key, Content-Type, Authorization' always;
+        if ($request_method = OPTIONS) {
+            return 204;
+        }
+    }
+
+    location /instance/print-test/ {
+        proxy_pass http://127.0.0.1:8093/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        add_header 'Access-Control-Allow-Origin' 'https://printbot-operator.duckdns.org' always;
+        add_header 'Access-Control-Allow-Methods' 'GET, POST, PATCH, DELETE, OPTIONS' always;
+        add_header 'Access-Control-Allow-Headers' 'X-API-Key, Content-Type, Authorization' always;
+        if ($request_method = OPTIONS) {
+            return 204;
+        }
+    }
+    location /instance/only-print/ {
+        proxy_pass http://127.0.0.1:8092/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        add_header 'Access-Control-Allow-Origin' 'https://printbot-operator.duckdns.org' always;
+        add_header 'Access-Control-Allow-Methods' 'GET, POST, PATCH, DELETE, OPTIONS' always;
+        add_header 'Access-Control-Allow-Headers' 'X-API-Key, Content-Type, Authorization' always;
+        if ($request_method = OPTIONS) {
+            return 204;
+        }
+    }
+
+    include snippets/printbot-webform.conf;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+    location /ops/ {
+       proxy_pass http://127.0.0.1:5173/ops/;
+       proxy_http_version 1.1;
+       proxy_set_header Upgrade $http_upgrade;
+       proxy_set_header Connection "upgrade";
+       proxy_set_header Host $host;
+       proxy_read_timeout 86400;
+    }    
+}

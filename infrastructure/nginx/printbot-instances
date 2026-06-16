@@ -1,0 +1,50 @@
+server {
+    listen 80;
+    server_name printbot.duckdns.org;
+    return 301 https://$host$request_uri;
+}
+server {
+    listen 443 ssl;
+    server_name printbot.duckdns.org;
+    ssl_certificate     /etc/letsencrypt/live/printbot.duckdns.org/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/printbot.duckdns.org/privkey.pem;
+
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+
+    location /instance/test-shop/ {
+        proxy_pass http://127.0.0.1:8091/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        add_header 'Access-Control-Allow-Origin' 'https://printbot-operator.duckdns.org' always;
+        add_header 'Access-Control-Allow-Methods' 'GET, POST, PATCH, DELETE, OPTIONS' always;
+        add_header 'Access-Control-Allow-Headers' 'X-API-Key, Content-Type, Authorization' always;
+        if ($request_method = OPTIONS) { return 204; }
+    }
+    location /instance/print-test/ {
+        proxy_pass http://127.0.0.1:8093/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        add_header 'Access-Control-Allow-Origin' 'https://printbot-operator.duckdns.org' always;
+        add_header 'Access-Control-Allow-Methods' 'GET, POST, PATCH, DELETE, OPTIONS' always;
+        add_header 'Access-Control-Allow-Headers' 'X-API-Key, Content-Type, Authorization' always;
+        if ($request_method = OPTIONS) { return 204; }
+    }
+    location /instance/only-print/ {
+        proxy_pass http://127.0.0.1:8092/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        add_header 'Access-Control-Allow-Origin' 'https://printbot-operator.duckdns.org' always;
+        add_header 'Access-Control-Allow-Methods' 'GET, POST, PATCH, DELETE, OPTIONS' always;
+        add_header 'Access-Control-Allow-Headers' 'X-API-Key, Content-Type, Authorization' always;
+        if ($request_method = OPTIONS) { return 204; }
+    }
+
+
+    include snippets/printbot-webform.conf;
+
+    location / {
+        return 404;
+    }
+}
