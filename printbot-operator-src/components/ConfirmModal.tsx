@@ -25,7 +25,8 @@ export function ConfirmModal({ title, body, confirmLabel, onConfirm, onCancel, d
   return (
     <>
       <div
-        className="fixed inset-0 z-60 bg-black/60 backdrop-blur-sm"
+        className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+        style={{ zIndex: 200 }}
         onClick={onCancel}
         aria-hidden="true"
       />
@@ -35,10 +36,11 @@ export function ConfirmModal({ title, body, confirmLabel, onConfirm, onCancel, d
         aria-labelledby="modal-title"
         aria-describedby="modal-body"
         className={cn(
-          'fixed z-70 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2',
+          'fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2',
           'w-full max-w-sm bg-slate-900 border border-slate-800 rounded-2xl p-6',
           'shadow-2xl'
         )}
+        style={{ zIndex: 201 }}
       >
         {danger && (
           <div className="flex justify-center mb-4">
