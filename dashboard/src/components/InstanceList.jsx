@@ -66,7 +66,7 @@ function InstanceRow({ inst, selected, onSelect, onAction }) {
 
       <div>
         <div style={styles.instName}>{inst.subdomain}</div>
-        <div style={styles.instUrl}>printbot-manager.duckdns.org/{inst.subdomain}</div>
+        <div style={styles.instUrl}>printbot.duckdns.org/instance/{inst.subdomain}</div>
       </div>
 
       <Badge status={inst.status} />
