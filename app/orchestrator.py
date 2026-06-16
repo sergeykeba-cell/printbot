@@ -473,7 +473,7 @@ async def get_operator_info(
         "bot_url": f"https://t.me/{instance.subdomain}_bot",
         "operator_secret": operator_secret,
         "operator_command": f"/operator {operator_secret}" if operator_secret else None,
-        "web_url": f"https://printbot.duckdns.org/instance/{instance.subdomain}",
+        "web_url": f"https://printbot.duckdns.org/{instance.subdomain}",
         "instance_api_key": instance_api_key,
         "operator_panel_url": "https://printbot-operator.duckdns.org",
     }
